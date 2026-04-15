@@ -9,30 +9,22 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { toast } from "sonner";
 
 export function LoginPage() {
-  const { signIn, signUp } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = isSignUp
-      ? await signUp(email, password)
-      : await signIn(email, password);
+    const { error } = await signIn(email, password);
 
     setLoading(false);
 
     if (error) {
-      toast.error(error);
-      return;
-    }
-
-    if (isSignUp) {
-      toast.success("Conta criada! Verifique seu email para confirmar.");
+      toast.error("Email ou senha incorretos");
       return;
     }
 
@@ -75,22 +67,13 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                autoComplete={isSignUp ? "new-password" : "current-password"}
+                autoComplete="current-password"
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Carregando..." : isSignUp ? "Criar conta" : "Entrar"}
+              {loading ? "Carregando..." : "Entrar"}
             </Button>
           </form>
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-              onClick={() => setIsSignUp(!isSignUp)}
-            >
-              {isSignUp ? "Ja tem conta? Entrar" : "Nao tem conta? Criar"}
-            </button>
-          </div>
         </CardContent>
       </Card>
     </div>
