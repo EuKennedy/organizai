@@ -1,38 +1,39 @@
-import { useState } from "react";
-import { Plus, Trash2, Film } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useMemo, useState } from "react";
+import { Plus, Film, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { useMovies } from "@/hooks/use-movies";
-import { searchMovies, resolveMovieGenres, posterUrl } from "@/lib/tmdb";
+import { searchMovies, resolveMovieGenres } from "@/lib/tmdb";
 import type { TMDBMovie } from "@/lib/tmdb";
 import { MediaSearchDialog, movieRenderItem } from "@/components/media-search-dialog";
-import { StatusBadge } from "@/components/status-badge";
-import { StarRating } from "@/components/star-rating";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { MovieCarousel } from "@/components/movie-carousel";
+import { MovieDetailModal } from "@/components/movie-detail-modal";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { Movie } from "@/types";
 
-const STATUS_OPTIONS = [
-  { value: "all", label: "Todos" },
-  { value: "want_to_watch", label: "Quero assistir" },
-  { value: "watching", label: "Assistindo" },
-  { value: "watched", label: "Assistido" },
+const RATING_FILTERS = [
+  { value: 0, label: "Todas" },
+  { value: 5, label: "★★★★★" },
+  { value: 4, label: "★★★★" },
+  { value: 3, label: "★★★" },
+  { value: 2, label: "★★" },
+  { value: 1, label: "★" },
 ] as const;
 
 export function MoviesPage() {
   const { movies, loading, addMovie, updateMovie, deleteMovie } = useMovies();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [ratingFilter, setRatingFilter] = useState(0);
 
-  const filtered = statusFilter === "all" ? movies : movies.filter((m) => m.status === statusFilter);
+  const filtered = useMemo(() => {
+    if (ratingFilter === 0) return movies;
+    return movies.filter((m) => m.personal_rating === ratingFilter);
+  }, [movies, ratingFilter]);
+
+  const allMovies = filtered;
+  const wantToWatch = useMemo(() => filtered.filter((m) => m.status === "want_to_watch"), [filtered]);
+  const watching = useMemo(() => filtered.filter((m) => m.status === "watching"), [filtered]);
+  const watched = useMemo(() => filtered.filter((m) => m.status === "watched"), [filtered]);
 
   const handleAddMovie = async (tmdbMovie: TMDBMovie) => {
     try {
@@ -52,21 +53,23 @@ export function MoviesPage() {
       });
       toast.success(`"${tmdbMovie.title}" adicionado`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao adicionar filme");
+      toast.error(err instanceof Error ? err.message : "Erro ao adicionar");
     }
   };
 
   const handleStatusChange = async (id: string, status: Movie["status"]) => {
     try {
       await updateMovie(id, { status });
+      setSelectedMovie((prev) => (prev?.id === id ? { ...prev, status } : prev));
     } catch {
-      toast.error("Erro ao atualizar status");
+      toast.error("Erro ao atualizar");
     }
   };
 
   const handleRating = async (id: string, rating: number) => {
     try {
       await updateMovie(id, { personal_rating: rating });
+      setSelectedMovie((prev) => (prev?.id === id ? { ...prev, personal_rating: rating } : prev));
     } catch {
       toast.error("Erro ao avaliar");
     }
@@ -82,136 +85,88 @@ export function MoviesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Filmes</h1>
-          <p className="text-sm text-muted-foreground">
-            {movies.length} {movies.length === 1 ? "filme" : "filmes"} na lista
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Filmes</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {movies.length} {movies.length === 1 ? "filme" : "filmes"} na sua lista
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={() => setSearchOpen(true)} size="sm">
-            <Plus className="mr-1.5 h-4 w-4" />
+        <div className="flex items-center gap-2">
+          {/* Rating filter */}
+          <div className="flex items-center gap-1 rounded-xl bg-muted/50 p-1">
+            <SlidersHorizontal className="ml-2 h-3.5 w-3.5 text-muted-foreground" />
+            {RATING_FILTERS.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setRatingFilter(value)}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
+                  ratingFilter === value
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
             Adicionar
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* Loading */}
       {loading && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-[340px] rounded-xl" />
+        <div className="space-y-6">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="space-y-3">
+              <Skeleton className="h-6 w-40" />
+              <div className="flex gap-3">
+                {Array.from({ length: 6 }).map((_, j) => (
+                  <Skeleton key={j} className="h-52 w-36 flex-none rounded-lg" />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
 
       {/* Empty */}
       {!loading && movies.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <Film className="mb-4 h-12 w-12 text-muted-foreground/40" />
-          <h3 className="text-lg font-medium">Nenhum filme ainda</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Clique em "Adicionar" para buscar e salvar filmes
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+            <Film className="h-8 w-8 text-primary" />
+          </div>
+          <h3 className="text-lg font-semibold">Sua lista esta vazia</h3>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            Adicione filmes para organizar o que voces querem assistir juntos
           </p>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="mt-5 flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            Buscar filme
+          </button>
         </div>
       )}
 
-      {/* Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <AnimatePresence mode="popLayout">
-          {filtered.map((movie) => (
-            <motion.div
-              key={movie.id}
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Card className="group relative overflow-hidden">
-                {/* Poster */}
-                {movie.poster_path ? (
-                  <img
-                    src={posterUrl(movie.poster_path, "w500")}
-                    alt={movie.title}
-                    className="aspect-[2/3] w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
-                    <Film className="h-12 w-12 text-muted-foreground/30" />
-                  </div>
-                )}
-
-                {/* Overlay */}
-                <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 opacity-0 transition-opacity group-hover:opacity-100">
-                  <div className="space-y-2">
-                    <p className="text-xs text-white/60 line-clamp-3">{movie.overview}</p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/50">TMDB: {movie.tmdb_score.toFixed(1)}</span>
-                      <span className="text-xs text-white/50">{movie.release_year}</span>
-                    </div>
-                    {movie.genres.length > 0 && (
-                      <p className="text-xs text-white/40">{movie.genres.join(", ")}</p>
-                    )}
-                    <div className="flex items-center justify-between pt-1">
-                      <StarRating
-                        value={movie.personal_rating}
-                        onChange={(v) => handleRating(movie.id, v)}
-                        size="sm"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-white/60 hover:text-red-400"
-                        onClick={() => handleDelete(movie.id, movie.title)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Info bar */}
-                <div className="space-y-2 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-sm font-medium leading-tight line-clamp-1">{movie.title}</h3>
-                    <StatusBadge status={movie.status} />
-                  </div>
-                  <Select
-                    value={movie.status}
-                    onValueChange={(v) => handleStatusChange(movie.id, v as Movie["status"])}
-                  >
-                    <SelectTrigger className="h-7 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="want_to_watch">Quero assistir</SelectItem>
-                      <SelectItem value="watching">Assistindo</SelectItem>
-                      <SelectItem value="watched">Assistido</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </Card>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+      {/* Carousels */}
+      {!loading && movies.length > 0 && (
+        <div className="space-y-8">
+          <MovieCarousel title="Todos" movies={allMovies} onSelect={setSelectedMovie} />
+          <MovieCarousel title="🎯 Quero assistir" movies={wantToWatch} onSelect={setSelectedMovie} />
+          <MovieCarousel title="▶️ Assistindo" movies={watching} onSelect={setSelectedMovie} />
+          <MovieCarousel title="✅ Assistido" movies={watched} onSelect={setSelectedMovie} />
+        </div>
+      )}
 
       {/* Search dialog */}
       <MediaSearchDialog
@@ -221,6 +176,15 @@ export function MoviesPage() {
         searchFn={searchMovies}
         onSelect={handleAddMovie}
         renderItem={movieRenderItem}
+      />
+
+      {/* Detail modal */}
+      <MovieDetailModal
+        movie={selectedMovie}
+        onClose={() => setSelectedMovie(null)}
+        onStatusChange={handleStatusChange}
+        onRate={handleRating}
+        onDelete={handleDelete}
       />
     </div>
   );
