@@ -30,6 +30,8 @@ export interface Series {
   first_air_year: number;
   genres: string[];
   tmdb_score: number;
+  director: string | null;
+  cast: string[];
   status: "want_to_watch" | "watching" | "watched";
   current_season: number | null;
   current_episode: number | null;

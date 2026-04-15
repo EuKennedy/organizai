@@ -1,44 +1,51 @@
-import { useState } from "react";
-import { Plus, Trash2, Tv } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useMemo, useState } from "react";
+import { Plus, Tv, ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSeries } from "@/hooks/use-series";
-import { searchSeries, resolveTVGenres, posterUrl } from "@/lib/tmdb";
+import { searchSeries, resolveTVGenres, getSeriesCredits } from "@/lib/tmdb";
 import type { TMDBSeries } from "@/lib/tmdb";
 import { MediaSearchDialog, seriesRenderItem } from "@/components/media-search-dialog";
-import { StatusBadge } from "@/components/status-badge";
-import { StarRating } from "@/components/star-rating";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { SeriesCarousel } from "@/components/series-carousel";
+import { SeriesDetailModal } from "@/components/series-detail-modal";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { Series } from "@/types";
-
-const STATUS_OPTIONS = [
-  { value: "all", label: "Todos" },
-  { value: "want_to_watch", label: "Quero assistir" },
-  { value: "watching", label: "Assistindo" },
-  { value: "watched", label: "Assistido" },
-] as const;
 
 export function SeriesPage() {
   const { series, loading, addSeries, updateSeries, deleteSeries } = useSeries();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
+  const [ratingFilter, setRatingFilter] = useState(0);
+  const [genreFilter, setGenreFilter] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
-  const filtered = statusFilter === "all" ? series : series.filter((s) => s.status === statusFilter);
+  const availableGenres = useMemo(() => {
+    const genreSet = new Set<string>();
+    series.forEach((s) => s.genres.forEach((g) => genreSet.add(g)));
+    return Array.from(genreSet).sort();
+  }, [series]);
+
+  const filtered = useMemo(() => {
+    let result = series;
+    if (ratingFilter > 0) {
+      result = result.filter((s) => s.personal_rating === ratingFilter);
+    }
+    if (genreFilter) {
+      result = result.filter((s) => s.genres.includes(genreFilter));
+    }
+    return result;
+  }, [series, ratingFilter, genreFilter]);
+
+  const wantToWatch = useMemo(() => filtered.filter((s) => s.status === "want_to_watch"), [filtered]);
+  const watching = useMemo(() => filtered.filter((s) => s.status === "watching"), [filtered]);
+  const watched = useMemo(() => filtered.filter((s) => s.status === "watched"), [filtered]);
+
+  const hasActiveFilter = ratingFilter > 0 || genreFilter !== null;
 
   const handleAddSeries = async (tmdbSeries: TMDBSeries) => {
     try {
       const year = tmdbSeries.first_air_date ? new Date(tmdbSeries.first_air_date).getFullYear() : 0;
+      const credits = await getSeriesCredits(tmdbSeries.id);
       await addSeries({
         tmdb_id: tmdbSeries.id,
         title: tmdbSeries.name,
@@ -49,6 +56,8 @@ export function SeriesPage() {
         first_air_year: year,
         genres: resolveTVGenres(tmdbSeries.genre_ids),
         tmdb_score: tmdbSeries.vote_average,
+        director: credits.director,
+        cast: credits.cast,
         status: "want_to_watch",
         current_season: null,
         current_episode: null,
@@ -56,22 +65,14 @@ export function SeriesPage() {
       });
       toast.success(`"${tmdbSeries.name}" adicionada`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao adicionar serie");
+      toast.error(err instanceof Error ? err.message : "Erro ao adicionar");
     }
   };
 
   const handleStatusChange = async (id: string, status: Series["status"]) => {
     try {
       await updateSeries(id, { status });
-    } catch {
-      toast.error("Erro ao atualizar status");
-    }
-  };
-
-  const handleEpisodeUpdate = async (id: string, field: "current_season" | "current_episode", value: string) => {
-    const num = value ? parseInt(value, 10) : null;
-    try {
-      await updateSeries(id, { [field]: num });
+      setSelectedSeries((prev) => (prev?.id === id ? { ...prev, status } : prev));
     } catch {
       toast.error("Erro ao atualizar");
     }
@@ -80,8 +81,19 @@ export function SeriesPage() {
   const handleRating = async (id: string, rating: number) => {
     try {
       await updateSeries(id, { personal_rating: rating });
+      setSelectedSeries((prev) => (prev?.id === id ? { ...prev, personal_rating: rating } : prev));
     } catch {
       toast.error("Erro ao avaliar");
+    }
+  };
+
+  const handleEpisodeUpdate = async (id: string, field: "current_season" | "current_episode", value: string) => {
+    const num = value ? parseInt(value, 10) : null;
+    try {
+      await updateSeries(id, { [field]: num });
+      setSelectedSeries((prev) => (prev?.id === id ? { ...prev, [field]: num } : prev));
+    } catch {
+      toast.error("Erro ao atualizar");
     }
   };
 
@@ -94,168 +106,179 @@ export function SeriesPage() {
     }
   };
 
+  const clearFilters = () => {
+    setRatingFilter(0);
+    setGenreFilter(null);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Series</h1>
-          <p className="text-sm text-muted-foreground">
-            {series.length} {series.length === 1 ? "serie" : "series"} na lista
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Series</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">
+            {series.length} {series.length === 1 ? "serie" : "series"}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={() => setSearchOpen(true)} size="sm">
-            <Plus className="mr-1.5 h-4 w-4" />
-            Adicionar
-          </Button>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-[380px] rounded-xl" />
-          ))}
-        </div>
-      )}
-
-      {!loading && series.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <Tv className="mb-4 h-12 w-12 text-muted-foreground/40" />
-          <h3 className="text-lg font-medium">Nenhuma serie ainda</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Clique em "Adicionar" para buscar e salvar series
-          </p>
-        </div>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <AnimatePresence mode="popLayout">
-          {filtered.map((s) => (
-            <motion.div
-              key={s.id}
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
+        <div className="flex items-center gap-2">
+          {series.length > 0 && (
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all sm:text-sm",
+                hasActiveFilter
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              )}
             >
-              <Card className="group relative overflow-hidden">
-                {s.poster_path ? (
-                  <img
-                    src={posterUrl(s.poster_path, "w500")}
-                    alt={s.title}
-                    className="aspect-[2/3] w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
-                    <Tv className="h-12 w-12 text-muted-foreground/30" />
-                  </div>
-                )}
-
-                {/* "Em andamento" badge */}
-                {s.status === "watching" && (
-                  <Badge className="absolute left-2 top-2 bg-yellow-500 text-white">
-                    Em andamento
-                  </Badge>
-                )}
-
-                {/* Overlay */}
-                <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 opacity-0 transition-opacity group-hover:opacity-100">
-                  <div className="space-y-2">
-                    <p className="text-xs text-white/60 line-clamp-3">{s.overview}</p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/50">TMDB: {s.tmdb_score.toFixed(1)}</span>
-                      <span className="text-xs text-white/50">{s.first_air_year}</span>
-                    </div>
-                    {s.genres.length > 0 && (
-                      <p className="text-xs text-white/40">{s.genres.join(", ")}</p>
-                    )}
-                    <div className="flex items-center justify-between pt-1">
-                      <StarRating
-                        value={s.personal_rating}
-                        onChange={(v) => handleRating(s.id, v)}
-                        size="sm"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-white/60 hover:text-red-400"
-                        onClick={() => handleDelete(s.id, s.title)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Info bar */}
-                <div className="space-y-2 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-sm font-medium leading-tight line-clamp-1">{s.title}</h3>
-                    <StatusBadge status={s.status} />
-                  </div>
-
-                  {/* Episode tracker */}
-                  {s.status === "watching" && (
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground">T</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          className="h-7 w-12 text-xs"
-                          value={s.current_season ?? ""}
-                          onChange={(e) => handleEpisodeUpdate(s.id, "current_season", e.target.value)}
-                          placeholder="-"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground">E</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          className="h-7 w-12 text-xs"
-                          value={s.current_episode ?? ""}
-                          onChange={(e) => handleEpisodeUpdate(s.id, "current_episode", e.target.value)}
-                          placeholder="-"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <Select
-                    value={s.status}
-                    onValueChange={(v) => handleStatusChange(s.id, v as Series["status"])}
-                  >
-                    <SelectTrigger className="h-7 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="want_to_watch">Quero assistir</SelectItem>
-                      <SelectItem value="watching">Assistindo</SelectItem>
-                      <SelectItem value="watched">Assistido</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </Card>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showFilters && "rotate-180")} />
+              Filtros
+              {hasActiveFilter && (
+                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                  {(ratingFilter > 0 ? 1 : 0) + (genreFilter ? 1 : 0)}
+                </span>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 sm:text-sm"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Adicionar</span>
+          </button>
+        </div>
       </div>
+
+      {/* Filters */}
+      {showFilters && series.length > 0 && (
+        <div className="space-y-3 rounded-xl border border-border bg-card/50 p-3 sm:p-4">
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Avaliacao</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[0, 5, 4, 3, 2, 1].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setRatingFilter(v)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
+                    ratingFilter === v
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {v === 0 ? "Todas" : `${"★".repeat(v)} ${v}`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {availableGenres.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Genero</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => setGenreFilter(null)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
+                    genreFilter === null
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  Todos
+                </button>
+                {availableGenres.map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setGenreFilter(g)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
+                      genreFilter === g
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {hasActiveFilter && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="space-y-6">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="space-y-3">
+              <Skeleton className="h-5 w-32" />
+              <div className="flex gap-3">
+                {Array.from({ length: 5 }).map((_, j) => (
+                  <Skeleton key={j} className="h-44 w-28 flex-none rounded-lg sm:h-52 sm:w-36" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty */}
+      {!loading && series.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center sm:py-24">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+            <Tv className="h-7 w-7 text-primary" />
+          </div>
+          <h3 className="text-base font-semibold">Nenhuma serie ainda</h3>
+          <p className="mt-1 max-w-xs text-xs text-muted-foreground sm:text-sm">
+            Adicione series para acompanhar o que voces estao assistindo
+          </p>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="mt-4 flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+          >
+            <Plus className="h-4 w-4" />
+            Buscar serie
+          </button>
+        </div>
+      )}
+
+      {/* No results */}
+      {!loading && series.length > 0 && filtered.length === 0 && (
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">Nenhuma serie com esse filtro</p>
+          <button onClick={clearFilters} className="mt-2 text-xs text-primary hover:underline">
+            Limpar filtros
+          </button>
+        </div>
+      )}
+
+      {/* Carousels */}
+      {!loading && filtered.length > 0 && (
+        <div className="space-y-6 sm:space-y-8">
+          {wantToWatch.length > 0 && (
+            <SeriesCarousel title="Quero assistir" series={wantToWatch} onSelect={setSelectedSeries} />
+          )}
+          {watching.length > 0 && (
+            <SeriesCarousel title="Assistindo" series={watching} onSelect={setSelectedSeries} />
+          )}
+          {watched.length > 0 && (
+            <SeriesCarousel title="Assistido" series={watched} onSelect={setSelectedSeries} />
+          )}
+        </div>
+      )}
 
       <MediaSearchDialog
         open={searchOpen}
@@ -264,6 +287,15 @@ export function SeriesPage() {
         searchFn={searchSeries}
         onSelect={handleAddSeries}
         renderItem={seriesRenderItem}
+      />
+
+      <SeriesDetailModal
+        series={selectedSeries}
+        onClose={() => setSelectedSeries(null)}
+        onStatusChange={handleStatusChange}
+        onRate={handleRating}
+        onEpisodeUpdate={handleEpisodeUpdate}
+        onDelete={handleDelete}
       />
     </div>
   );
