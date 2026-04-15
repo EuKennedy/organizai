@@ -69,6 +69,51 @@ export function backdropUrl(path: string | null, size: "w780" | "w1280" = "w780"
   return `${TMDB_IMAGE}/${size}${path}`;
 }
 
+export interface TMDBCredits {
+  director: string | null;
+  cast: string[];
+}
+
+export async function getMovieCredits(movieId: number): Promise<TMDBCredits> {
+  const url = `${TMDB_BASE}/movie/${movieId}/credits?api_key=${getApiKey()}&language=pt-BR`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { director: null, cast: [] };
+    const data = (await res.json()) as {
+      crew: { job: string; name: string }[];
+      cast: { name: string; order: number }[];
+    };
+    const director = data.crew.find((c) => c.job === "Director")?.name ?? null;
+    const cast = data.cast
+      .sort((a, b) => a.order - b.order)
+      .slice(0, 5)
+      .map((c) => c.name);
+    return { director, cast };
+  } catch {
+    return { director: null, cast: [] };
+  }
+}
+
+export async function getSeriesCredits(seriesId: number): Promise<TMDBCredits> {
+  const url = `${TMDB_BASE}/tv/${seriesId}/credits?api_key=${getApiKey()}&language=pt-BR`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { director: null, cast: [] };
+    const data = (await res.json()) as {
+      crew: { job: string; name: string }[];
+      cast: { name: string; order: number }[];
+    };
+    const creator = data.crew.find((c) => c.job === "Executive Producer" || c.job === "Creator")?.name ?? null;
+    const cast = data.cast
+      .sort((a, b) => a.order - b.order)
+      .slice(0, 5)
+      .map((c) => c.name);
+    return { director: creator, cast };
+  } catch {
+    return { director: null, cast: [] };
+  }
+}
+
 export async function searchMovies(query: string): Promise<TMDBMovie[]> {
   if (!query.trim()) return [];
   const url = `${TMDB_BASE}/search/movie?api_key=${getApiKey()}&language=pt-BR&query=${encodeURIComponent(query)}&page=1`;

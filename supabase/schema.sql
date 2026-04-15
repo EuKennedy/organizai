@@ -17,6 +17,8 @@ create table if not exists public.movies (
   release_year integer not null default 0,
   genres text[] not null default '{}',
   tmdb_score numeric(3,1) not null default 0,
+  director text,
+  "cast" text[] not null default '{}',
   status text not null default 'want_to_watch' check (status in ('want_to_watch', 'watching', 'watched')),
   personal_rating integer check (personal_rating is null or (personal_rating >= 1 and personal_rating <= 5)),
   created_at timestamptz not null default now(),

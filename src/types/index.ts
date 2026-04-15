@@ -10,6 +10,8 @@ export interface Movie {
   release_year: number;
   genres: string[];
   tmdb_score: number;
+  director: string | null;
+  cast: string[];
   status: "want_to_watch" | "watching" | "watched";
   personal_rating: number | null;
   created_at: string;

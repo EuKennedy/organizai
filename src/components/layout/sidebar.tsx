@@ -41,7 +41,7 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile top bar */}
-      <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-4 backdrop-blur-xl lg:hidden">
+      <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
         <button
           onClick={() => setOpen(!open)}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-accent"
