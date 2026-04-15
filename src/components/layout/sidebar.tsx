@@ -3,7 +3,8 @@ import {
   Film,
   Tv,
   Heart,
-  Wallet,
+  Receipt,
+  Target,
   LogOut,
   Sun,
   Moon,
@@ -19,7 +20,8 @@ const NAV_ITEMS = [
   { to: "/movies", label: "Filmes", icon: Film },
   { to: "/series", label: "Series", icon: Tv },
   { to: "/dates", label: "Dates", icon: Heart },
-  { to: "/finance", label: "Financeiro", icon: Wallet },
+  { to: "/expenses", label: "Despesas", icon: Receipt },
+  { to: "/goals", label: "Metas", icon: Target },
 ] as const;
 
 export function Sidebar() {

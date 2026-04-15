@@ -5,7 +5,8 @@ import { AppLayout } from "@/components/layout/app-layout";
 import { MoviesPage } from "@/pages/movies";
 import { SeriesPage } from "@/pages/series";
 import { DatesPage } from "@/pages/dates";
-import { FinancePage } from "@/pages/finance";
+import { ExpensesPage } from "@/pages/expenses";
+import { GoalsPage } from "@/pages/goals";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -39,7 +40,9 @@ export function App() {
                 <Route path="/movies" element={<MoviesPage />} />
                 <Route path="/series" element={<SeriesPage />} />
                 <Route path="/dates" element={<DatesPage />} />
-                <Route path="/finance" element={<FinancePage />} />
+                <Route path="/expenses" element={<ExpensesPage />} />
+                <Route path="/goals" element={<GoalsPage />} />
+                <Route path="/finance" element={<Navigate to="/expenses" replace />} />
               </Routes>
             </AppLayout>
           </ProtectedRoute>
