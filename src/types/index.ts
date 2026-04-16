@@ -76,6 +76,15 @@ export interface FinancialGoal {
   updated_at: string;
 }
 
+export interface GoalDeposit {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  amount: number;
+  note: string | null;
+  created_at: string;
+}
+
 export type WeatherIcon = "sunny" | "rainy" | "snowy" | "cloudy";
 
 export const WEATHER_EMOJI: Record<WeatherIcon, string> = {

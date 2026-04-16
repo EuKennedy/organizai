@@ -6,9 +6,13 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronUp,
+  History,
+  Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useGoals } from "@/hooks/use-finance";
 import { PageHero } from "@/components/page-hero";
 import { EmptyState } from "@/components/empty-state";
@@ -31,11 +35,35 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+/**
+ * Smart percent:
+ * - 0 → "0%"
+ * - (0, 1) → "0,4%" (don't claim progress is zero when it isn't)
+ * - [1, 100] → "17%" (clean)
+ * - >= 100 → "100%"
+ */
+function formatPct(pct: number): string {
+  if (pct >= 100) return "100%";
+  if (pct <= 0) return "0%";
+  if (pct < 1) return `${pct.toFixed(1).replace(".", ",")}%`;
+  if (pct < 10) return `${pct.toFixed(1).replace(".", ",")}%`;
+  return `${Math.round(pct)}%`;
+}
+
 export function GoalsPage() {
-  const { goals, loading, addGoal, updateGoal, deleteGoal } = useGoals();
+  const {
+    goals,
+    depositsByGoal,
+    loading,
+    addGoal,
+    deleteGoal,
+    addDeposit,
+    deleteDeposit,
+  } = useGoals();
+
   const [createOpen, setCreateOpen] = useState(false);
-  const [depositGoalId, setDepositGoalId] = useState<string | null>(null);
-  const [depositAmount, setDepositAmount] = useState("");
+  const [depositDraft, setDepositDraft] = useState<Record<string, string>>({});
+  const [submittingDeposit, setSubmittingDeposit] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [goalName, setGoalName] = useState("");
@@ -55,20 +83,43 @@ export function GoalsPage() {
     }
   };
 
-  const handleDeposit = async () => {
-    if (!depositGoalId || !depositAmount) return;
-    const amount = parseFloat(depositAmount);
-    if (isNaN(amount) || amount <= 0) return;
-    const goal = goals.find((g) => g.id === depositGoalId);
-    if (!goal) return;
-    const newAmount = Number(goal.current_amount) + amount;
+  const handleDeposit = async (goalId: string) => {
+    const raw = depositDraft[goalId];
+    const amount = parseFloat(raw ?? "");
+    if (!amount || amount <= 0) return;
+    setSubmittingDeposit(goalId);
     try {
-      await updateGoal(depositGoalId, { current_amount: newAmount });
-      setDepositGoalId(null);
-      setDepositAmount("");
+      await addDeposit(goalId, amount);
+      setDepositDraft((prev) => ({ ...prev, [goalId]: "" }));
       toast.success(`${formatCurrency(amount)} depositado`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao depositar");
+    } finally {
+      setSubmittingDeposit(null);
+    }
+  };
+
+  const handleRemoveDeposit = async (depositId: string) => {
+    try {
+      await deleteDeposit(depositId);
+      toast.success("Depósito removido");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao remover");
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string, hasDeposits: boolean) => {
+    if (hasDeposits) {
+      const ok = window.confirm(
+        "Essa meta tem depósitos registrados. Excluir apaga tudo. Continuar?"
+      );
+      if (!ok) return;
+    }
+    try {
+      await deleteGoal(goalId);
+      toast.success("Meta removida");
     } catch {
-      toast.error("Erro ao depositar");
+      toast.error("Erro ao remover meta");
     }
   };
 
@@ -109,8 +160,7 @@ export function GoalsPage() {
                 Progresso geral
               </p>
               <p className="mt-2 text-4xl font-semibold tabular tracking-tight sm:text-5xl">
-                {totalPct.toFixed(0)}
-                <span className="text-xl text-muted-foreground sm:text-2xl">%</span>
+                {formatPct(totalPct)}
               </p>
             </div>
             <div className="text-right">
@@ -150,12 +200,15 @@ export function GoalsPage() {
         <div className="mt-6 space-y-3">
           <AnimatePresence mode="popLayout">
             {goals.map((g) => {
+              const deposits = depositsByGoal[g.id] ?? [];
               const pct =
                 Number(g.target_amount) > 0
                   ? Math.min((Number(g.current_amount) / Number(g.target_amount)) * 100, 100)
                   : 0;
               const isExpanded = expandedId === g.id;
               const isComplete = pct >= 100;
+              const draft = depositDraft[g.id] ?? "";
+              const isSubmitting = submittingDeposit === g.id;
 
               return (
                 <motion.div
@@ -169,7 +222,11 @@ export function GoalsPage() {
                     isComplete ? "border-emerald-500/30" : "border-border"
                   )}
                 >
-                  <div className="p-4 sm:p-5">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(isExpanded ? null : g.id)}
+                    className="w-full p-4 text-left transition-colors hover:bg-muted/20 sm:p-5"
+                  >
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
@@ -208,19 +265,18 @@ export function GoalsPage() {
                             isComplete ? "text-emerald-500" : "text-primary"
                           )}
                         >
-                          {pct.toFixed(0)}%
+                          {formatPct(pct)}
                         </span>
-                        <button
-                          onClick={() => setExpandedId(isExpanded ? null : g.id)}
-                          aria-label={isExpanded ? "Fechar" : "Expandir"}
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+                        <span
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground/60"
+                          aria-hidden="true"
                         >
                           {isExpanded ? (
                             <ChevronUp className="h-4 w-4" />
                           ) : (
                             <ChevronDown className="h-4 w-4" />
                           )}
-                        </button>
+                        </span>
                       </div>
                     </div>
                     <div className="mt-4">
@@ -229,7 +285,7 @@ export function GoalsPage() {
                         className={cn("h-2", isComplete && "[&>div]:bg-emerald-500")}
                       />
                     </div>
-                  </div>
+                  </button>
 
                   <AnimatePresence initial={false}>
                     {isExpanded && (
@@ -240,40 +296,43 @@ export function GoalsPage() {
                         transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
                         className="overflow-hidden"
                       >
-                        <div className="border-t border-border bg-background/30 px-4 py-4 sm:px-5">
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                            <div className="flex-1 space-y-1.5">
-                              <Label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                                Depositar valor
-                              </Label>
-                              <div className="flex gap-2">
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="R$ 0,00"
-                                  value={depositGoalId === g.id ? depositAmount : ""}
-                                  onFocus={() => setDepositGoalId(g.id)}
-                                  onChange={(e) => {
-                                    setDepositGoalId(g.id);
-                                    setDepositAmount(e.target.value);
-                                  }}
-                                  className="h-10"
-                                />
-                                <button
-                                  onClick={handleDeposit}
-                                  disabled={depositGoalId !== g.id || !depositAmount}
-                                  className="inline-flex h-10 items-center gap-1.5 rounded-full bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 hover:shadow-md disabled:opacity-50"
-                                >
-                                  <TrendingUp className="h-3.5 w-3.5" />
-                                  Depositar
-                                </button>
-                              </div>
+                        <div className="space-y-5 border-t border-border bg-background/30 px-4 py-4 sm:px-5 sm:py-5">
+                          {/* Novo depósito */}
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                              Novo depósito
+                            </Label>
+                            <div className="flex gap-2">
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                step="0.01"
+                                min="0"
+                                placeholder="R$ 0,00"
+                                value={draft}
+                                onChange={(e) =>
+                                  setDepositDraft((prev) => ({
+                                    ...prev,
+                                    [g.id]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleDeposit(g.id);
+                                }}
+                                disabled={isSubmitting || isComplete}
+                                className="h-10 flex-1"
+                              />
+                              <button
+                                onClick={() => handleDeposit(g.id)}
+                                disabled={!draft || parseFloat(draft) <= 0 || isSubmitting || isComplete}
+                                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 hover:shadow-md disabled:opacity-50 disabled:hover:bg-emerald-600"
+                              >
+                                <TrendingUp className="h-3.5 w-3.5" />
+                                {isSubmitting ? "..." : "Depositar"}
+                              </button>
                             </div>
-                          </div>
-                          <div className="mt-4 flex items-center justify-between">
-                            <p className="text-xs text-muted-foreground tabular">
-                              Falta:{" "}
+                            <p className="text-[11px] text-muted-foreground tabular">
+                              Falta{" "}
                               <span className="font-semibold text-foreground">
                                 {formatCurrency(
                                   Math.max(
@@ -281,14 +340,82 @@ export function GoalsPage() {
                                     0
                                   )
                                 )}
-                              </span>
+                              </span>{" "}
+                              pra bater a meta.
                             </p>
+                          </div>
+
+                          {/* Histórico de depósitos */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                <History className="h-3 w-3" />
+                                Histórico
+                              </Label>
+                              {deposits.length > 0 && (
+                                <span className="text-[10px] text-muted-foreground tabular">
+                                  {deposits.length}{" "}
+                                  {deposits.length === 1 ? "depósito" : "depósitos"}
+                                </span>
+                              )}
+                            </div>
+
+                            {deposits.length === 0 ? (
+                              <div className="rounded-xl border border-dashed border-border bg-background/40 px-4 py-5 text-center">
+                                <p className="text-xs text-muted-foreground">
+                                  Ainda sem depósitos. Registre o primeiro acima.
+                                </p>
+                              </div>
+                            ) : (
+                              <ul className="space-y-1.5">
+                                <AnimatePresence initial={false}>
+                                  {deposits.map((d) => (
+                                    <motion.li
+                                      key={d.id}
+                                      layout
+                                      initial={{ opacity: 0, y: 6 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                                      transition={{ duration: 0.18 }}
+                                      className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-2.5"
+                                    >
+                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                                        <TrendingUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-[14px] font-semibold tabular">
+                                          +{formatCurrency(Number(d.amount))}
+                                        </p>
+                                        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                          <Calendar className="h-3 w-3" />
+                                          {format(parseISO(d.created_at), "dd MMM yyyy · HH:mm", {
+                                            locale: ptBR,
+                                          })}
+                                          {d.note && (
+                                            <span className="truncate">· {d.note}</span>
+                                          )}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveDeposit(d.id)}
+                                        aria-label="Remover depósito"
+                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </motion.li>
+                                  ))}
+                                </AnimatePresence>
+                              </ul>
+                            )}
+                          </div>
+
+                          {/* Excluir meta */}
+                          <div className="flex justify-end pt-1">
                             <button
-                              onClick={async () => {
-                                await deleteGoal(g.id);
-                                toast.success("Meta removida");
-                              }}
-                              className="flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-red-500"
+                              onClick={() => handleDeleteGoal(g.id, deposits.length > 0)}
+                              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground/70 transition-colors hover:bg-red-500/10 hover:text-red-500"
                             >
                               <Trash2 className="h-3 w-3" />
                               Excluir meta
@@ -324,6 +451,7 @@ export function GoalsPage() {
               <Label className="text-xs">Valor alvo (R$)</Label>
               <Input
                 type="number"
+                inputMode="decimal"
                 step="0.01"
                 min="0"
                 placeholder="3000,00"
