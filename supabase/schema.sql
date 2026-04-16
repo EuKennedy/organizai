@@ -231,3 +231,50 @@ create trigger set_date_ideas_updated_at
 create trigger set_financial_goals_updated_at
   before update on public.financial_goals
   for each row execute function public.handle_updated_at();
+
+-- =============================================================================
+-- MIMOS (Cosmetics / personal care wishlist)
+-- =============================================================================
+
+create table if not exists public.mimos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  category text not null check (category in (
+    'olhos', 'iluminador', 'rosto', 'blush', 'boca',
+    'skin_care', 'corpo', 'acessorios', 'piercings'
+  )),
+  brand text not null default '',
+  name text not null,
+  link text,
+  image_url text,
+  owned boolean not null default false,
+  finished boolean not null default false,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.mimos enable row level security;
+
+create policy "Users can view own mimos"
+  on public.mimos for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert own mimos"
+  on public.mimos for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own mimos"
+  on public.mimos for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete own mimos"
+  on public.mimos for delete
+  using (auth.uid() = user_id);
+
+create index if not exists idx_mimos_user_category on public.mimos(user_id, category);
+create index if not exists idx_mimos_user_owned on public.mimos(user_id, owned);
+
+create trigger set_mimos_updated_at
+  before update on public.mimos
+  for each row execute function public.handle_updated_at();

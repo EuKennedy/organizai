@@ -5,6 +5,7 @@ import {
   Heart,
   Receipt,
   Target,
+  Sparkles,
   LogOut,
   Sun,
   Moon,
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { to: "/movies", label: "Filmes", icon: Film },
   { to: "/series", label: "Series", icon: Tv },
   { to: "/dates", label: "Dates", icon: Heart },
+  { to: "/mimos", label: "Mimos do meu amor", icon: Sparkles },
   { to: "/expenses", label: "Despesas", icon: Receipt },
   { to: "/goals", label: "Metas", icon: Target },
 ] as const;

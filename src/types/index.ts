@@ -98,3 +98,57 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+// =============================================================================
+// MIMOS
+// =============================================================================
+
+export type MimoCategory =
+  | "olhos"
+  | "iluminador"
+  | "rosto"
+  | "blush"
+  | "boca"
+  | "skin_care"
+  | "corpo"
+  | "acessorios"
+  | "piercings";
+
+export interface Mimo {
+  id: string;
+  user_id: string;
+  category: MimoCategory;
+  brand: string;
+  name: string;
+  link: string | null;
+  image_url: string | null;
+  owned: boolean;
+  finished: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const MIMO_CATEGORIES: { value: MimoCategory; label: string; emoji: string }[] = [
+  { value: "olhos", label: "Olhos", emoji: "👁️" },
+  { value: "iluminador", label: "Iluminador", emoji: "✨" },
+  { value: "rosto", label: "Rosto", emoji: "💆" },
+  { value: "blush", label: "Blush", emoji: "🌸" },
+  { value: "boca", label: "Boca", emoji: "💋" },
+  { value: "skin_care", label: "Skin Care", emoji: "🧴" },
+  { value: "corpo", label: "Corpo", emoji: "🫧" },
+  { value: "acessorios", label: "Acessorios", emoji: "👜" },
+  { value: "piercings", label: "Piercings", emoji: "💎" },
+];
+
+export const MIMO_CATEGORY_MAP: Record<MimoCategory, { label: string; emoji: string }> = {
+  olhos: { label: "Olhos", emoji: "👁️" },
+  iluminador: { label: "Iluminador", emoji: "✨" },
+  rosto: { label: "Rosto", emoji: "💆" },
+  blush: { label: "Blush", emoji: "🌸" },
+  boca: { label: "Boca", emoji: "💋" },
+  skin_care: { label: "Skin Care", emoji: "🧴" },
+  corpo: { label: "Corpo", emoji: "🫧" },
+  acessorios: { label: "Acessorios", emoji: "👜" },
+  piercings: { label: "Piercings", emoji: "💎" },
+};
