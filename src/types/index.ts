@@ -98,6 +98,7 @@ export interface GalleryAlbum {
   description: string | null;
   layout: GalleryLayout;
   cover_photo_id: string | null;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }

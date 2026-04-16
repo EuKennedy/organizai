@@ -25,6 +25,7 @@ export function useGallery() {
         .from("gallery_albums")
         .select("*")
         .eq("user_id", user.id)
+        .order("sort_order", { ascending: true })
         .order("created_at", { ascending: false }),
       supabase
         .from("gallery_photos")
@@ -69,11 +70,16 @@ export function useGallery() {
       layout?: GalleryLayout;
     }): Promise<GalleryAlbum> => {
       if (!user) throw new Error("Não autenticado");
+      // Place new album at the top (lowest sort_order - 1)
+      const minOrder = albums.length > 0
+        ? Math.min(...albums.map((a) => a.sort_order ?? 0))
+        : 0;
       const payload = {
         user_id: user.id,
         name: input.name.trim(),
         description: input.description?.trim() || null,
         layout: input.layout ?? "masonry",
+        sort_order: minOrder - 1,
       };
       const { data, error } = await supabase
         .from("gallery_albums")
@@ -85,7 +91,49 @@ export function useGallery() {
       setAlbums((prev) => [row, ...prev]);
       return row;
     },
-    [user]
+    [user, albums]
+  );
+
+  /**
+   * Persist a user-defined album order. Takes the full ordered list of
+   * album ids (first = position 1). Updates each row's sort_order and
+   * refreshes local state.
+   */
+  const reorderAlbums = useCallback(
+    async (orderedIds: string[]) => {
+      if (!user) throw new Error("Não autenticado");
+
+      // Optimistic local reorder
+      setAlbums((prev) => {
+        const byId = new Map(prev.map((a) => [a.id, a]));
+        const next: GalleryAlbum[] = [];
+        orderedIds.forEach((id, idx) => {
+          const row = byId.get(id);
+          if (row) next.push({ ...row, sort_order: idx + 1 });
+        });
+        // append any missing (defensive)
+        for (const a of prev) {
+          if (!orderedIds.includes(a.id)) next.push(a);
+        }
+        return next;
+      });
+
+      // Persist in parallel. Scoped by user_id via RLS.
+      const updates = orderedIds.map((id, idx) =>
+        supabase
+          .from("gallery_albums")
+          .update({ sort_order: idx + 1 })
+          .eq("id", id)
+      );
+      const results = await Promise.all(updates);
+      const failed = results.find((r) => r.error);
+      if (failed?.error) {
+        // revert by refetching
+        await fetchAll();
+        throw new Error(failed.error.message);
+      }
+    },
+    [user, fetchAll]
   );
 
   const updateAlbum = useCallback(
@@ -204,6 +252,7 @@ export function useGallery() {
     createAlbum,
     updateAlbum,
     deleteAlbum,
+    reorderAlbums,
     addPhotos,
     deletePhoto,
     setCover,

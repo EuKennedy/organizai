@@ -49,7 +49,7 @@ export function PhotoTile({
         />
       </button>
 
-      {/* Shadow overlay on hover */}
+      {/* Shadow overlay on hover (desktop only) */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
       {/* Cover pin indicator */}
@@ -60,8 +60,11 @@ export function PhotoTile({
         </div>
       )}
 
-      {/* Actions */}
-      <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      {/*
+       * Actions — always visible on touch devices (opacity-100),
+       * hover-reveal on desktop (sm:opacity-0 + group-hover).
+       */}
+      <div className="absolute right-2 top-2 flex gap-1 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100">
         <button
           type="button"
           onClick={(e) => {
@@ -69,9 +72,9 @@ export function PhotoTile({
             onSetCover();
           }}
           aria-label={isCover ? "Remover capa" : "Definir como capa"}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white/90 backdrop-blur-md ring-1 ring-white/10 transition-all hover:bg-black/80 hover:scale-105"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-black/65 text-white/95 backdrop-blur-md ring-1 ring-white/15 shadow-lg transition-all active:scale-95 hover:bg-black/80 hover:scale-105"
         >
-          {isCover ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+          {isCover ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
         </button>
         <button
           type="button"
@@ -80,9 +83,9 @@ export function PhotoTile({
             onDelete();
           }}
           aria-label="Remover foto"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white/90 backdrop-blur-md ring-1 ring-white/10 transition-all hover:bg-red-500/80 hover:scale-105"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-black/65 text-white/95 backdrop-blur-md ring-1 ring-white/15 shadow-lg transition-all active:scale-95 hover:bg-red-500/80 hover:scale-105"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-4 w-4" />
         </button>
       </div>
     </motion.div>

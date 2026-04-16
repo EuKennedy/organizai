@@ -398,6 +398,7 @@ create table if not exists public.gallery_albums (
   layout text not null default 'masonry'
     check (layout in ('masonry', 'mosaic', 'collage', 'grid')),
   cover_photo_id uuid,
+  sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -416,6 +417,8 @@ create policy "Users delete own albums" on public.gallery_albums for delete usin
 
 create index if not exists idx_albums_user_created
   on public.gallery_albums(user_id, created_at desc);
+create index if not exists idx_albums_user_sort
+  on public.gallery_albums(user_id, sort_order, created_at desc);
 
 -- -----------------------------------------------------------------------------
 -- GALLERY PHOTOS

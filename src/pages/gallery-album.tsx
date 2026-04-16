@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Images, Trash2, Check } from "lucide-react";
+import { ArrowLeft, Images, Trash2, Check, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -13,6 +13,7 @@ import {
 } from "@/components/gallery/photo-layouts";
 import { PhotoLightbox } from "@/components/gallery/photo-lightbox";
 import { PhotoUploader } from "@/components/gallery/photo-uploader";
+import { CoverPickerDialog } from "@/components/gallery/cover-picker-dialog";
 import { btnSecondarySm } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 import { GALLERY_LAYOUTS, type GalleryLayout } from "@/types";
@@ -41,6 +42,7 @@ export function GalleryAlbumPage() {
   );
 
   const [lightboxIndex, setLightboxIndex] = useState(-1);
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false);
 
   if (!loading && !album) {
     return (
@@ -176,6 +178,20 @@ export function GalleryAlbumPage() {
                 );
               })}
             </div>
+
+            {/* Cover picker */}
+            {photos.length > 0 && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setCoverPickerOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/60 px-3 py-1.5 text-[11.5px] font-medium text-foreground/85 backdrop-blur-sm transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  {album.cover_photo_id ? "Trocar capa" : "Escolher capa"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -251,6 +267,23 @@ export function GalleryAlbumPage() {
         onClose={() => setLightboxIndex(-1)}
         onChangeIndex={setLightboxIndex}
       />
+
+      {album && (
+        <CoverPickerDialog
+          open={coverPickerOpen}
+          photos={photos}
+          currentCoverId={album.cover_photo_id}
+          onClose={() => setCoverPickerOpen(false)}
+          onChange={async (photoId) => {
+            try {
+              await updateAlbum(album.id, { cover_photo_id: photoId });
+              toast.success(photoId ? "Capa atualizada" : "Capa automática");
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Erro ao salvar capa");
+            }
+          }}
+        />
+      )}
     </>
   );
 }
