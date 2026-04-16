@@ -129,7 +129,7 @@ export function SeriesPage() {
         eyebrow="Biblioteca"
         title={
           <>
-            Séries <span className="font-serif italic text-primary">do casal</span>
+            Nossa biblioteca <span className="font-serif italic text-primary">de séries</span>
           </>
         }
         subtitle={
