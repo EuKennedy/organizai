@@ -115,7 +115,7 @@ export function MoviesPage() {
         eyebrow="Biblioteca"
         title={
           <>
-            Filmes <span className="font-serif italic text-primary">do nosso casal</span>
+            Nossa biblioteca <span className="font-serif italic text-primary">de filmes</span>
           </>
         }
         subtitle={
