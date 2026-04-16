@@ -75,10 +75,11 @@ export function AlbumReorderRow({
         </div>
       </div>
 
-      {/* Mobile move buttons — explicit alternative to drag */}
-      <div className="flex shrink-0 items-center gap-0.5 sm:hidden">
+      {/* Explicit up/down buttons — always available, works regardless of drag support */}
+      <div className="flex shrink-0 items-center gap-0.5">
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -86,12 +87,13 @@ export function AlbumReorderRow({
           }}
           disabled={position === 1}
           aria-label="Mover pra cima"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors disabled:opacity-30 active:bg-muted"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent active:scale-95"
         >
           <ArrowUp className="h-4 w-4" />
         </button>
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -99,18 +101,19 @@ export function AlbumReorderRow({
           }}
           disabled={position === total}
           aria-label="Mover pra baixo"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors disabled:opacity-30 active:bg-muted"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent active:scale-95"
         >
           <ArrowDown className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Drag handle — desktop */}
+      {/* Drag handle — desktop only (optional alternative to buttons) */}
       <div
         className={cn(
-          "hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground/60 transition-colors sm:flex",
-          dragging ? "cursor-grabbing text-primary" : "cursor-grab hover:bg-muted hover:text-foreground"
+          "hidden h-10 w-8 shrink-0 items-center justify-center text-muted-foreground/50 transition-colors sm:flex",
+          dragging ? "cursor-grabbing text-primary" : "cursor-grab hover:text-foreground"
         )}
+        aria-hidden="true"
       >
         <GripVertical className="h-5 w-5" />
       </div>

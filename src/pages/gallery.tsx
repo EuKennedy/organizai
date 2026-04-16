@@ -180,12 +180,7 @@ export function GalleryPage() {
               Modo reordenar ativo
             </p>
             <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-              <span className="hidden sm:inline">
-                Arraste pela alça (⋮⋮) ou solte pra reorganizar.
-              </span>
-              <span className="sm:hidden">
-                Toque nas setas ▲▼ pra mover cada mural.
-              </span>
+              Use as setas ▲▼ pra mover cada mural — ou arraste pela alça ⋮⋮.
             </p>
           </div>
           <button
