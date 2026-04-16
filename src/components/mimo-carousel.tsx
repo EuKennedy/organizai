@@ -1,19 +1,17 @@
 import { useRef } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { MimoCard } from "@/components/mimo-card";
-import type { Mimo, MimoCategory } from "@/types";
-import { MIMO_CATEGORY_MAP } from "@/types";
+import type { Mimo, MimoCategory, MimoCategoryDef } from "@/types";
 
 interface MimoCarouselProps {
-  category: MimoCategory;
+  meta: MimoCategoryDef;
   mimos: Mimo[];
   onSelect: (m: Mimo) => void;
   onAdd: (category: MimoCategory) => void;
 }
 
-export function MimoCarousel({ category, mimos, onSelect, onAdd }: MimoCarouselProps) {
+export function MimoCarousel({ meta, mimos, onSelect, onAdd }: MimoCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const meta = MIMO_CATEGORY_MAP[category];
 
   const scroll = (direction: "left" | "right") => {
     if (!scrollRef.current) return;
@@ -59,7 +57,7 @@ export function MimoCarousel({ category, mimos, onSelect, onAdd }: MimoCarouselP
             </div>
           )}
           <button
-            onClick={() => onAdd(category)}
+            onClick={() => onAdd(meta.value)}
             className="flex h-8 items-center gap-1 rounded-full bg-primary/10 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
           >
             <Plus className="h-3 w-3" />
@@ -70,7 +68,7 @@ export function MimoCarousel({ category, mimos, onSelect, onAdd }: MimoCarouselP
 
       {mimos.length === 0 ? (
         <button
-          onClick={() => onAdd(category)}
+          onClick={() => onAdd(meta.value)}
           className="flex w-full items-center gap-3 rounded-xl border border-dashed border-border px-4 py-6 text-left transition-colors hover:border-primary/30 hover:bg-primary/5"
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/50 text-xl">

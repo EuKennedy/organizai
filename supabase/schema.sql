@@ -236,13 +236,12 @@ create trigger set_financial_goals_updated_at
 -- MIMOS (Cosmetics / personal care wishlist)
 -- =============================================================================
 
+-- `category` is free text: default categories live in application code,
+-- custom ones are stored in public.mimo_categories (see below).
 create table if not exists public.mimos (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  category text not null check (category in (
-    'olhos', 'iluminador', 'rosto', 'blush', 'boca',
-    'skin_care', 'corpo', 'acessorios', 'piercings'
-  )),
+  category text not null,
   brand text not null default '',
   name text not null,
   link text,
@@ -278,3 +277,71 @@ create index if not exists idx_mimos_user_owned on public.mimos(user_id, owned);
 create trigger set_mimos_updated_at
   before update on public.mimos
   for each row execute function public.handle_updated_at();
+
+-- =============================================================================
+-- MIMO CATEGORIES (user-defined custom categories)
+-- =============================================================================
+
+create table if not exists public.mimo_categories (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  value text not null,
+  label text not null,
+  emoji text not null default '✨',
+  created_at timestamptz not null default now(),
+  unique(user_id, value)
+);
+
+alter table public.mimo_categories enable row level security;
+
+create policy "Users can view own mimo_categories"
+  on public.mimo_categories for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert own mimo_categories"
+  on public.mimo_categories for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own mimo_categories"
+  on public.mimo_categories for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete own mimo_categories"
+  on public.mimo_categories for delete
+  using (auth.uid() = user_id);
+
+create index if not exists idx_mimo_categories_user on public.mimo_categories(user_id);
+
+-- =============================================================================
+-- STORAGE BUCKET: mimos-photos (public read, per-user write)
+-- Path convention: {user_id}/{uuid}.{ext}
+-- =============================================================================
+
+insert into storage.buckets (id, name, public)
+values ('mimos-photos', 'mimos-photos', true)
+on conflict (id) do update set public = excluded.public;
+
+create policy "Public read mimos photos"
+  on storage.objects for select
+  using (bucket_id = 'mimos-photos');
+
+create policy "Users upload own mimos photos"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'mimos-photos'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy "Users update own mimos photos"
+  on storage.objects for update
+  using (
+    bucket_id = 'mimos-photos'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy "Users delete own mimos photos"
+  on storage.objects for delete
+  using (
+    bucket_id = 'mimos-photos'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );

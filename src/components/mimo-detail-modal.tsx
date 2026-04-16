@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { X, Trash2, ExternalLink, Check, AlertTriangle, Sparkles, ImageIcon } from "lucide-react";
+import { X, Trash2, ExternalLink, Check, AlertTriangle, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MimoImageUpload } from "@/components/mimo-image-upload";
+import { CreateCategoryDialog } from "@/components/create-category-dialog";
 import { cn } from "@/lib/utils";
-import { MIMO_CATEGORIES, MIMO_CATEGORY_MAP, type Mimo, type MimoCategory } from "@/types";
+import { useMimoCategories } from "@/hooks/use-mimo-categories";
+import type { Mimo, MimoCategory, MimoCategoryDef } from "@/types";
 
 interface MimoDetailModalProps {
   mimo: Mimo | null;
@@ -24,17 +27,20 @@ export function MimoDetailModal({
   onSave,
   onDelete,
 }: MimoDetailModalProps) {
+  const { categories, getCategory, createCategory } = useMimoCategories();
+
   const [category, setCategory] = useState<MimoCategory>(
     mimo?.category ?? defaultCategory ?? "olhos"
   );
   const [brand, setBrand] = useState(mimo?.brand ?? "");
   const [name, setName] = useState(mimo?.name ?? "");
   const [link, setLink] = useState(mimo?.link ?? "");
-  const [imageUrl, setImageUrl] = useState(mimo?.image_url ?? "");
+  const [imageUrl, setImageUrl] = useState<string | null>(mimo?.image_url ?? null);
   const [owned, setOwned] = useState(mimo?.owned ?? false);
   const [finished, setFinished] = useState(mimo?.finished ?? false);
   const [notes, setNotes] = useState(mimo?.notes ?? "");
   const [saving, setSaving] = useState(false);
+  const [creatingCategory, setCreatingCategory] = useState(false);
 
   useEffect(() => {
     if (mimo) {
@@ -42,12 +48,19 @@ export function MimoDetailModal({
       setBrand(mimo.brand);
       setName(mimo.name);
       setLink(mimo.link ?? "");
-      setImageUrl(mimo.image_url ?? "");
+      setImageUrl(mimo.image_url ?? null);
       setOwned(mimo.owned);
       setFinished(mimo.finished);
       setNotes(mimo.notes ?? "");
     } else if (defaultCategory) {
       setCategory(defaultCategory);
+      setBrand("");
+      setName("");
+      setLink("");
+      setImageUrl(null);
+      setOwned(false);
+      setFinished(false);
+      setNotes("");
     }
   }, [mimo, defaultCategory]);
 
@@ -60,7 +73,7 @@ export function MimoDetailModal({
         brand: brand.trim(),
         name: name.trim(),
         link: link.trim() || null,
-        image_url: imageUrl.trim() || null,
+        image_url: imageUrl,
         owned,
         finished: owned ? finished : false,
         notes: notes.trim() || null,
@@ -71,7 +84,13 @@ export function MimoDetailModal({
     }
   };
 
-  const meta = MIMO_CATEGORY_MAP[category];
+  const handleCreateCategory = async (label: string, emoji: string): Promise<MimoCategoryDef> => {
+    const created = await createCategory(label, emoji);
+    setCategory(created.value);
+    return created;
+  };
+
+  const meta = getCategory(category);
 
   return (
     <AnimatePresence>
@@ -92,28 +111,18 @@ export function MimoDetailModal({
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             className="fixed inset-x-3 top-[3%] z-50 mx-auto max-h-[94dvh] max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-card shadow-2xl sm:inset-x-auto sm:top-[5%] sm:max-h-[90dvh]"
           >
-            {/* Hero */}
-            <div className="relative h-48 overflow-hidden rounded-t-2xl sm:h-56">
-              {imageUrl ? (
-                <img src={imageUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-pink-500/30 via-purple-500/30 to-rose-500/30">
-                  <div className="text-center">
-                    <Sparkles className="mx-auto mb-2 h-8 w-8 text-pink-300/60" />
-                    <p className="text-xs text-white/50">Adicione uma foto do produto</p>
-                  </div>
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
+            {/* Hero / Image uploader */}
+            <div className="relative">
+              <MimoImageUpload value={imageUrl} onChange={setImageUrl} />
 
               <button
                 onClick={onClose}
-                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white/80 backdrop-blur-sm transition hover:bg-black/70"
+                className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white/80 backdrop-blur-sm transition hover:bg-black/70"
               >
                 <X className="h-4 w-4" />
               </button>
 
-              <div className="absolute bottom-3 left-4 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+              <div className="pointer-events-none absolute bottom-3 left-4 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
                 <span>{meta.emoji}</span>
                 {meta.label}
               </div>
@@ -144,11 +153,11 @@ export function MimoDetailModal({
                 </div>
               </div>
 
-              {/* Category chips */}
+              {/* Category chips + "+" button */}
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Categoria</Label>
                 <div className="flex flex-wrap gap-1.5">
-                  {MIMO_CATEGORIES.map(({ value, label, emoji }) => (
+                  {categories.map(({ value, label, emoji }) => (
                     <button
                       key={value}
                       type="button"
@@ -164,6 +173,15 @@ export function MimoDetailModal({
                       {label}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => setCreatingCategory(true)}
+                    className="flex items-center gap-1 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-2.5 py-1.5 text-xs font-medium text-primary transition-all hover:border-primary hover:bg-primary/10"
+                    aria-label="Criar nova categoria"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Nova
+                  </button>
                 </div>
               </div>
 
@@ -221,20 +239,6 @@ export function MimoDetailModal({
                     </div>
                   </button>
                 </div>
-              </div>
-
-              {/* Image URL */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <ImageIcon className="h-3 w-3" />
-                  URL da foto (opcional)
-                </Label>
-                <Input
-                  placeholder="https://..."
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  className="h-9"
-                />
               </div>
 
               {/* Link */}
@@ -298,6 +302,12 @@ export function MimoDetailModal({
               </div>
             </div>
           </motion.div>
+
+          <CreateCategoryDialog
+            open={creatingCategory}
+            onClose={() => setCreatingCategory(false)}
+            onCreate={handleCreateCategory}
+          />
         </>
       )}
     </AnimatePresence>

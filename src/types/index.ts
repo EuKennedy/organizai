@@ -103,16 +103,25 @@ export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 // MIMOS
 // =============================================================================
 
-export type MimoCategory =
-  | "olhos"
-  | "iluminador"
-  | "rosto"
-  | "blush"
-  | "boca"
-  | "skin_care"
-  | "corpo"
-  | "acessorios"
-  | "piercings";
+// Category is now a free-form string (built-in defaults + user-created customs).
+// The DB no longer enforces a CHECK constraint — validation is app-side.
+export type MimoCategory = string;
+
+export interface MimoCategoryDef {
+  value: MimoCategory;
+  label: string;
+  emoji: string;
+  custom?: boolean;
+}
+
+export interface MimoCustomCategoryRow {
+  id: string;
+  user_id: string;
+  value: string;
+  label: string;
+  emoji: string;
+  created_at: string;
+}
 
 export interface Mimo {
   id: string;
@@ -129,7 +138,7 @@ export interface Mimo {
   updated_at: string;
 }
 
-export const MIMO_CATEGORIES: { value: MimoCategory; label: string; emoji: string }[] = [
+export const DEFAULT_MIMO_CATEGORIES: MimoCategoryDef[] = [
   { value: "olhos", label: "Olhos", emoji: "👁️" },
   { value: "iluminador", label: "Iluminador", emoji: "✨" },
   { value: "rosto", label: "Rosto", emoji: "💆" },
@@ -141,14 +150,24 @@ export const MIMO_CATEGORIES: { value: MimoCategory; label: string; emoji: strin
   { value: "piercings", label: "Piercings", emoji: "💎" },
 ];
 
-export const MIMO_CATEGORY_MAP: Record<MimoCategory, { label: string; emoji: string }> = {
-  olhos: { label: "Olhos", emoji: "👁️" },
-  iluminador: { label: "Iluminador", emoji: "✨" },
-  rosto: { label: "Rosto", emoji: "💆" },
-  blush: { label: "Blush", emoji: "🌸" },
-  boca: { label: "Boca", emoji: "💋" },
-  skin_care: { label: "Skin Care", emoji: "🧴" },
-  corpo: { label: "Corpo", emoji: "🫧" },
-  acessorios: { label: "Acessorios", emoji: "👜" },
-  piercings: { label: "Piercings", emoji: "💎" },
+export const DEFAULT_MIMO_CATEGORY_MAP: Record<string, MimoCategoryDef> = Object.fromEntries(
+  DEFAULT_MIMO_CATEGORIES.map((c) => [c.value, c])
+);
+
+// Fallback used when a category value is unknown (e.g. legacy row for a deleted custom cat).
+export const UNKNOWN_MIMO_CATEGORY: MimoCategoryDef = {
+  value: "__unknown__",
+  label: "Outros",
+  emoji: "✨",
 };
+
+/** Slug helper: "Cílios postiços!" → "cilios_posticos" */
+export function slugifyCategory(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+}

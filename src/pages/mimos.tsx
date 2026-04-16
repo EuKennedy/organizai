@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import { Plus, Sparkles, ChevronDown, X, Check, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useMimos } from "@/hooks/use-mimos";
+import { useMimoCategories } from "@/hooks/use-mimo-categories";
 import { MimoCarousel } from "@/components/mimo-carousel";
 import { MimoDetailModal } from "@/components/mimo-detail-modal";
+import { CreateCategoryDialog } from "@/components/create-category-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { MIMO_CATEGORIES, type Mimo, type MimoCategory } from "@/types";
+import type { Mimo, MimoCategory } from "@/types";
 
 type StatusFilter = "all" | "owned" | "wish" | "finished";
 
@@ -19,11 +21,14 @@ const STATUS_FILTERS: { value: StatusFilter; label: string; icon?: typeof Check 
 
 export function MimosPage() {
   const { mimos, loading, addMimo, updateMimo, deleteMimo } = useMimos();
+  const { categories, getCategory, createCategory } = useMimoCategories();
+
   const [selected, setSelected] = useState<Mimo | null>(null);
   const [creatingCategory, setCreatingCategory] = useState<MimoCategory | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<MimoCategory | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showNewCategoryDialog, setShowNewCategoryDialog] = useState(false);
 
   const filtered = useMemo(() => {
     return mimos.filter((m) => {
@@ -45,9 +50,18 @@ export function MimosPage() {
     return { total: mimos.length, owned, wish, finished };
   }, [mimos]);
 
-  const visibleCategories = categoryFilter
-    ? [categoryFilter]
-    : (MIMO_CATEGORIES.map((c) => c.value) as MimoCategory[]);
+  // Union of known categories (defaults + customs) + any leftover category values
+  // present on existing mimos that are no longer in the categories list.
+  const visibleCategories: MimoCategory[] = useMemo(() => {
+    if (categoryFilter) return [categoryFilter];
+    const known = categories.map((c) => c.value);
+    const extras = Array.from(
+      new Set(mimos.map((m) => m.category).filter((v) => !known.includes(v)))
+    );
+    return [...known, ...extras];
+  }, [categories, mimos, categoryFilter]);
+
+  const firstCategoryValue = categories[0]?.value ?? "olhos";
 
   const handleSave = async (data: Partial<Mimo> & { category: MimoCategory; name: string }) => {
     try {
@@ -120,7 +134,7 @@ export function MimosPage() {
             </button>
           )}
           <button
-            onClick={() => setCreatingCategory("olhos")}
+            onClick={() => setCreatingCategory(firstCategoryValue)}
             className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground sm:text-sm"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -183,7 +197,7 @@ export function MimosPage() {
               >
                 Todas
               </button>
-              {MIMO_CATEGORIES.map(({ value, label, emoji }) => (
+              {categories.map(({ value, label, emoji }) => (
                 <button
                   key={value}
                   onClick={() => setCategoryFilter(value)}
@@ -198,6 +212,13 @@ export function MimosPage() {
                   {label}
                 </button>
               ))}
+              <button
+                onClick={() => setShowNewCategoryDialog(true)}
+                className="flex items-center gap-1 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-2.5 py-1.5 text-xs font-medium text-primary transition-all hover:border-primary hover:bg-primary/10"
+              >
+                <Plus className="h-3 w-3" />
+                Nova
+              </button>
             </div>
           </div>
           {hasActiveFilter && (
@@ -239,7 +260,7 @@ export function MimosPage() {
             Comece a catalogar seus produtos favoritos — maquiagem, skincare, acessorios...
           </p>
           <button
-            onClick={() => setCreatingCategory("olhos")}
+            onClick={() => setCreatingCategory(firstCategoryValue)}
             className="mt-4 flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
           >
             <Plus className="h-4 w-4" />
@@ -265,10 +286,11 @@ export function MimosPage() {
             const items = filtered.filter((m) => m.category === cat);
             // If there's a category filter active, always show carousel even if empty
             if (items.length === 0 && !categoryFilter) return null;
+            const meta = getCategory(cat);
             return (
               <MimoCarousel
                 key={cat}
-                category={cat}
+                meta={meta}
                 mimos={items}
                 onSelect={setSelected}
                 onAdd={(c) => setCreatingCategory(c)}
@@ -292,6 +314,16 @@ export function MimosPage() {
         defaultCategory={creatingCategory}
         onClose={() => setCreatingCategory(null)}
         onSave={handleSave}
+      />
+
+      <CreateCategoryDialog
+        open={showNewCategoryDialog}
+        onClose={() => setShowNewCategoryDialog(false)}
+        onCreate={async (label, emoji) => {
+          const created = await createCategory(label, emoji);
+          setCategoryFilter(created.value);
+          return created;
+        }}
       />
     </div>
   );
