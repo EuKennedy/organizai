@@ -1,6 +1,10 @@
 # OrganizAI
 
-**I know, Supabase is crap, I'm not an idiot, I used it simply because I didn't want to host this project on a VPS and spend money on a domain. So I did what was necessary just to fill my belly, hahaha. Anyway, feel free to contribute or download the code and pretend it's yours, either way, what matters is impressing our great love...**
+**I know Supabase isn’t the most robust database choice, and I’m aware of its limitations in terms of scalability, cost, and potential security concerns. That said, this is a personal project, and I chose it for the sake of speed and simplicity — I didn’t want to deal with setting up a VPS or managing a dedicated database.
+
+This project came from a real need my girlfriend and I had. Instead of relying on spreadsheets, I decided to build a small app for our own use.
+
+Feel free to explore the code, contribute, or fork the project and build your own version. At the end of the day, it’s all about learning, experimenting, and creating something useful.**
 
 > **Personal use project.** This app was born from a real need my girlfriend and I had — organizing movies, series, date ideas, finances, and beauty products in one place, without depending on scattered spreadsheets. We publish the source code openly because we believe in sharing, but **the instance you see on GitHub Pages is ours alone**: our data, our lists, our mimos.
 
