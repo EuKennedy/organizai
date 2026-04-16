@@ -1,22 +1,26 @@
 import { useMemo, useState } from "react";
-import { Plus, Sparkles, ChevronDown, X, Check, AlertTriangle } from "lucide-react";
+import { Plus, Sparkles, Check, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useMimos } from "@/hooks/use-mimos";
 import { useMimoCategories } from "@/hooks/use-mimo-categories";
 import { MimoCarousel } from "@/components/mimo-carousel";
 import { MimoDetailModal } from "@/components/mimo-detail-modal";
 import { CreateCategoryDialog } from "@/components/create-category-dialog";
+import { PageHero } from "@/components/page-hero";
+import { EmptyState } from "@/components/empty-state";
+import { FilterBar, FilterLabel } from "@/components/filter-bar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { btnPrimary, btnPrimarySm, chip, chipActive, chipIdle } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 import type { Mimo, MimoCategory } from "@/types";
 
 type StatusFilter = "all" | "owned" | "wish" | "finished";
 
-const STATUS_FILTERS: { value: StatusFilter; label: string; icon?: typeof Check }[] = [
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "Todos" },
-  { value: "owned", label: "Tenho", icon: Check },
   { value: "wish", label: "Desejo" },
-  { value: "finished", label: "Acabou", icon: AlertTriangle },
+  { value: "owned", label: "Tenho" },
+  { value: "finished", label: "Acabou" },
 ];
 
 export function MimosPage() {
@@ -27,7 +31,6 @@ export function MimosPage() {
   const [creatingCategory, setCreatingCategory] = useState<MimoCategory | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<MimoCategory | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
   const [showNewCategoryDialog, setShowNewCategoryDialog] = useState(false);
 
   const filtered = useMemo(() => {
@@ -40,18 +43,15 @@ export function MimosPage() {
     });
   }, [mimos, statusFilter, categoryFilter]);
 
-  const hasActiveFilter = statusFilter !== "all" || categoryFilter !== null;
+  const activeFilters = (statusFilter !== "all" ? 1 : 0) + (categoryFilter ? 1 : 0);
 
-  // Stats
   const stats = useMemo(() => {
-    const owned = mimos.filter((m) => m.owned).length;
+    const owned = mimos.filter((m) => m.owned && !m.finished).length;
     const wish = mimos.filter((m) => !m.owned).length;
     const finished = mimos.filter((m) => m.finished).length;
     return { total: mimos.length, owned, wish, finished };
   }, [mimos]);
 
-  // Union of known categories (defaults + customs) + any leftover category values
-  // present on existing mimos that are no longer in the categories list.
   const visibleCategories: MimoCategory[] = useMemo(() => {
     if (categoryFilter) return [categoryFilter];
     const known = categories.map((c) => c.value);
@@ -67,7 +67,7 @@ export function MimosPage() {
     try {
       if (selected) {
         await updateMimo(selected.id, data);
-        toast.success("Mimo atualizado!");
+        toast.success("Mimo atualizado");
       } else {
         await addMimo({
           category: data.category,
@@ -79,7 +79,7 @@ export function MimosPage() {
           finished: data.finished ?? false,
           notes: data.notes ?? null,
         });
-        toast.success("Mimo adicionado!");
+        toast.success("Mimo adicionado");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao salvar");
@@ -101,147 +101,113 @@ export function MimosPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">💕</span>
-            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Mimos do meu amor</h1>
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
-            {stats.total} {stats.total === 1 ? "item" : "itens"} salvos
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {mimos.length > 0 && (
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all sm:text-sm",
-                hasActiveFilter
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showFilters && "rotate-180")} />
-              Filtros
-              {hasActiveFilter && (
-                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-                  {(statusFilter !== "all" ? 1 : 0) + (categoryFilter ? 1 : 0)}
-                </span>
-              )}
-            </button>
-          )}
+    <>
+      <PageHero
+        eyebrow="Lista dela"
+        title={
+          <>
+            Mimos <span className="font-serif italic text-primary">do meu amor</span>
+          </>
+        }
+        subtitle={
+          stats.total === 0
+            ? "Catalogue os cosméticos, acessórios e mimos prediletos."
+            : `${stats.total} ${stats.total === 1 ? "item salvo" : "itens salvos"}`
+        }
+        ambient="rose"
+        action={
           <button
             onClick={() => setCreatingCategory(firstCategoryValue)}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground sm:text-sm"
+            className={btnPrimarySm}
           >
             <Plus className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Adicionar</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Stats cards */}
+      {/* Stats */}
       {stats.total > 0 && (
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tenho</p>
-            <p className="text-lg font-bold text-green-500 sm:text-xl">{stats.owned}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Desejo</p>
-            <p className="text-lg font-bold text-pink-500 sm:text-xl">{stats.wish}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Acabou</p>
-            <p className="text-lg font-bold text-orange-500 sm:text-xl">{stats.finished}</p>
-          </div>
+        <div className="mb-6 grid grid-cols-3 gap-3">
+          <StatCard
+            accent="emerald"
+            icon={<Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
+            label="Tenho"
+            value={stats.owned}
+          />
+          <StatCard
+            accent="rose"
+            icon={<Sparkles className="h-3.5 w-3.5" strokeWidth={2} />}
+            label="Desejo"
+            value={stats.wish}
+          />
+          <StatCard
+            accent="amber"
+            icon={<AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.5} />}
+            label="Acabou"
+            value={stats.finished}
+          />
         </div>
       )}
 
-      {/* Filters */}
-      {showFilters && mimos.length > 0 && (
-        <div className="space-y-3 rounded-xl border border-border bg-card/50 p-3 sm:p-4">
-          <div className="space-y-1.5">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</p>
+      {mimos.length > 0 && (
+        <FilterBar active={activeFilters} onClear={clearFilters}>
+          <div className="space-y-2">
+            <FilterLabel>Status</FilterLabel>
             <div className="flex flex-wrap gap-1.5">
               {STATUS_FILTERS.map((f) => (
                 <button
                   key={f.value}
                   onClick={() => setStatusFilter(f.value)}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
-                    statusFilter === f.value
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                  )}
+                  className={cn(chip, statusFilter === f.value ? chipActive : chipIdle)}
                 >
                   {f.label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="space-y-1.5">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Categoria</p>
+          <div className="space-y-2">
+            <FilterLabel>Categoria</FilterLabel>
             <div className="flex flex-wrap gap-1.5">
               <button
                 onClick={() => setCategoryFilter(null)}
-                className={cn(
-                  "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
-                  !categoryFilter
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                )}
+                className={cn(chip, !categoryFilter ? chipActive : chipIdle)}
               >
                 Todas
               </button>
-              {categories.map(({ value, label, emoji }) => (
+              {categories.map((c) => (
                 <button
-                  key={value}
-                  onClick={() => setCategoryFilter(value)}
-                  className={cn(
-                    "flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
-                    categoryFilter === value
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                  )}
+                  key={c.value}
+                  onClick={() => setCategoryFilter(c.value === categoryFilter ? null : c.value)}
+                  className={cn(chip, categoryFilter === c.value ? chipActive : chipIdle)}
                 >
-                  <span>{emoji}</span>
-                  {label}
+                  <span>{c.emoji}</span>
+                  {c.label}
                 </button>
               ))}
               <button
                 onClick={() => setShowNewCategoryDialog(true)}
-                className="flex items-center gap-1 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-2.5 py-1.5 text-xs font-medium text-primary transition-all hover:border-primary hover:bg-primary/10"
+                className="inline-flex items-center gap-1 rounded-full border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:border-primary hover:bg-primary/10"
               >
                 <Plus className="h-3 w-3" />
                 Nova
               </button>
             </div>
           </div>
-          {hasActiveFilter && (
-            <button
-              onClick={clearFilters}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-              Limpar filtros
-            </button>
-          )}
-        </div>
+        </FilterBar>
       )}
 
-      {/* Loading */}
       {loading && (
-        <div className="space-y-6">
+        <div className="mt-8 space-y-8">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="space-y-3">
-              <Skeleton className="h-5 w-32" />
-              <div className="flex gap-3">
-                {Array.from({ length: 4 }).map((_, j) => (
-                  <Skeleton key={j} className="h-52 w-36 flex-none rounded-xl" />
+            <div key={i} className="space-y-4">
+              <Skeleton className="h-6 w-40" />
+              <div className="flex gap-4">
+                {Array.from({ length: 5 }).map((_, j) => (
+                  <Skeleton
+                    key={j}
+                    className="aspect-[2/3] w-[140px] flex-none rounded-2xl sm:w-[172px] lg:w-[196px]"
+                  />
                 ))}
               </div>
             </div>
@@ -249,42 +215,40 @@ export function MimosPage() {
         </div>
       )}
 
-      {/* Empty */}
       {!loading && mimos.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20">
-            <Sparkles className="h-8 w-8 text-pink-500" />
-          </div>
-          <h3 className="text-base font-semibold">Sua lista esta vazia</h3>
-          <p className="mt-1 max-w-xs text-xs text-muted-foreground sm:text-sm">
-            Comece a catalogar seus produtos favoritos — maquiagem, skincare, acessorios...
-          </p>
-          <button
-            onClick={() => setCreatingCategory(firstCategoryValue)}
-            className="mt-4 flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
-          >
-            <Plus className="h-4 w-4" />
-            Adicionar primeiro mimo
-          </button>
-        </div>
+        <EmptyState
+          icon={Sparkles}
+          title="Comece o catálogo"
+          description="Salve cosméticos, skincare, acessórios — com foto, link e anotação."
+          tone="rose"
+          action={
+            <button
+              onClick={() => setCreatingCategory(firstCategoryValue)}
+              className={btnPrimary}
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar primeiro mimo
+            </button>
+          }
+        />
       )}
 
-      {/* No results */}
       {!loading && mimos.length > 0 && filtered.length === 0 && (
-        <div className="py-16 text-center">
-          <p className="text-sm text-muted-foreground">Nenhum item com esse filtro</p>
-          <button onClick={clearFilters} className="mt-2 text-xs text-primary hover:underline">
+        <div className="py-20 text-center">
+          <p className="text-sm text-muted-foreground">Nada combina com esses filtros.</p>
+          <button
+            onClick={clearFilters}
+            className="mt-3 text-xs font-medium text-primary hover:underline"
+          >
             Limpar filtros
           </button>
         </div>
       )}
 
-      {/* Carousels */}
       {!loading && filtered.length > 0 && (
-        <div className="space-y-6 sm:space-y-8">
+        <div className="mt-8 space-y-10 sm:space-y-12">
           {visibleCategories.map((cat) => {
             const items = filtered.filter((m) => m.category === cat);
-            // If there's a category filter active, always show carousel even if empty
             if (items.length === 0 && !categoryFilter) return null;
             const meta = getCategory(cat);
             return (
@@ -325,6 +289,58 @@ export function MimosPage() {
           return created;
         }}
       />
+    </>
+  );
+}
+
+function StatCard({
+  accent,
+  icon,
+  label,
+  value,
+}: {
+  accent: "emerald" | "rose" | "amber";
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+}) {
+  const tones: Record<typeof accent, { line: string; text: string; bg: string }> = {
+    emerald: {
+      line: "from-transparent via-emerald-500/60 to-transparent",
+      text: "text-emerald-500",
+      bg: "bg-emerald-500/10",
+    },
+    rose: {
+      line: "from-transparent via-pink-500/60 to-transparent",
+      text: "text-pink-500",
+      bg: "bg-pink-500/10",
+    },
+    amber: {
+      line: "from-transparent via-amber-500/60 to-transparent",
+      text: "text-amber-500",
+      bg: "bg-amber-500/10",
+    },
+  };
+  const t = tones[accent];
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-5">
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r",
+          t.line
+        )}
+      />
+      <div className="flex items-center gap-2">
+        <div className={cn("flex h-6 w-6 items-center justify-center rounded-md", t.bg)}>
+          <span className={t.text}>{icon}</span>
+        </div>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </p>
+      </div>
+      <p className={cn("mt-3 text-3xl font-semibold tabular tracking-tight sm:text-[32px]", t.text)}>
+        {value}
+      </p>
     </div>
   );
 }

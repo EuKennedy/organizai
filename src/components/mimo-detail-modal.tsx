@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { X, Trash2, ExternalLink, Check, AlertTriangle, Plus } from "lucide-react";
+import { X, Trash2, ExternalLink, Plus, Check, AlertTriangle, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MimoImageUpload } from "@/components/mimo-image-upload";
 import { CreateCategoryDialog } from "@/components/create-category-dialog";
+import { btnPrimary, chip, chipActive, chipIdle } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 import { useMimoCategories } from "@/hooks/use-mimo-categories";
 import type { Mimo, MimoCategory, MimoCategoryDef } from "@/types";
@@ -17,6 +18,14 @@ interface MimoDetailModalProps {
   onClose: () => void;
   onSave: (data: Partial<Mimo> & { category: MimoCategory; name: string }) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+}
+
+type StatusValue = "wish" | "owned" | "finished";
+
+function toStatus(m: { owned: boolean; finished: boolean }): StatusValue {
+  if (m.finished && m.owned) return "finished";
+  if (m.owned) return "owned";
+  return "wish";
 }
 
 export function MimoDetailModal({
@@ -36,8 +45,9 @@ export function MimoDetailModal({
   const [name, setName] = useState(mimo?.name ?? "");
   const [link, setLink] = useState(mimo?.link ?? "");
   const [imageUrl, setImageUrl] = useState<string | null>(mimo?.image_url ?? null);
-  const [owned, setOwned] = useState(mimo?.owned ?? false);
-  const [finished, setFinished] = useState(mimo?.finished ?? false);
+  const [status, setStatus] = useState<StatusValue>(
+    mimo ? toStatus(mimo) : "wish"
+  );
   const [notes, setNotes] = useState(mimo?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [creatingCategory, setCreatingCategory] = useState(false);
@@ -49,8 +59,7 @@ export function MimoDetailModal({
       setName(mimo.name);
       setLink(mimo.link ?? "");
       setImageUrl(mimo.image_url ?? null);
-      setOwned(mimo.owned);
-      setFinished(mimo.finished);
+      setStatus(toStatus(mimo));
       setNotes(mimo.notes ?? "");
     } else if (defaultCategory) {
       setCategory(defaultCategory);
@@ -58,8 +67,7 @@ export function MimoDetailModal({
       setName("");
       setLink("");
       setImageUrl(null);
-      setOwned(false);
-      setFinished(false);
+      setStatus("wish");
       setNotes("");
     }
   }, [mimo, defaultCategory]);
@@ -74,8 +82,8 @@ export function MimoDetailModal({
         name: name.trim(),
         link: link.trim() || null,
         image_url: imageUrl,
-        owned,
-        finished: owned ? finished : false,
+        owned: status !== "wish",
+        finished: status === "finished",
         notes: notes.trim() || null,
       });
       onClose();
@@ -92,6 +100,27 @@ export function MimoDetailModal({
 
   const meta = getCategory(category);
 
+  const STATUS_OPTS: { value: StatusValue; label: string; icon: React.ReactNode; color: string }[] = [
+    {
+      value: "wish",
+      label: "Desejo",
+      icon: <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />,
+      color: "text-pink-500",
+    },
+    {
+      value: "owned",
+      label: "Tenho",
+      icon: <Check className="h-3.5 w-3.5" strokeWidth={3} />,
+      color: "text-emerald-500",
+    },
+    {
+      value: "finished",
+      label: "Acabou",
+      icon: <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.5} />,
+      color: "text-amber-500",
+    },
+  ];
+
   return (
     <AnimatePresence>
       {(mimo || isNew) && (
@@ -100,7 +129,7 @@ export function MimoDetailModal({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md"
             onClick={onClose}
           />
 
@@ -108,66 +137,68 @@ export function MimoDetailModal({
             initial={{ opacity: 0, y: 40, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.97 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed inset-x-3 top-[3%] z-50 mx-auto max-h-[94dvh] max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-card shadow-2xl sm:inset-x-auto sm:top-[5%] sm:max-h-[90dvh]"
+            transition={{ type: "spring", damping: 26, stiffness: 320 }}
+            className="fixed inset-x-3 top-[3%] z-50 mx-auto max-h-[94dvh] max-w-lg overflow-y-auto overscroll-contain rounded-3xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:top-[5%] sm:max-h-[90dvh]"
           >
-            {/* Hero / Image uploader */}
+            {/* Hero / uploader */}
             <div className="relative">
               <MimoImageUpload value={imageUrl} onChange={setImageUrl} />
 
               <button
                 onClick={onClose}
-                className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white/80 backdrop-blur-sm transition hover:bg-black/70"
+                aria-label="Fechar"
+                className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur-md ring-1 ring-white/10 transition-all hover:bg-black/75 hover:scale-105"
               >
                 <X className="h-4 w-4" />
               </button>
 
-              <div className="pointer-events-none absolute bottom-3 left-4 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+              <div className="pointer-events-none absolute bottom-3 left-4 flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white backdrop-blur-md ring-1 ring-white/10">
                 <span>{meta.emoji}</span>
                 {meta.label}
               </div>
             </div>
 
             {/* Form */}
-            <div className="space-y-4 p-4 sm:p-5">
+            <div className="space-y-5 p-5 sm:p-6">
               {/* Name + Brand */}
               <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Marca</Label>
+                  <Label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Marca
+                  </Label>
                   <Input
                     placeholder="Ruby Rose"
                     value={brand}
                     onChange={(e) => setBrand(e.target.value)}
-                    className="h-9"
+                    className="h-10"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Nome do produto</Label>
+                  <Label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Nome do produto
+                  </Label>
                   <Input
                     placeholder="Paleta de sombras Girl's Syndrome"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     autoFocus={isNew}
-                    className="h-9"
+                    className="h-10"
                   />
                 </div>
               </div>
 
-              {/* Category chips + "+" button */}
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Categoria</Label>
+              {/* Categoria chips + "+" */}
+              <div className="space-y-2">
+                <Label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Categoria
+                </Label>
                 <div className="flex flex-wrap gap-1.5">
                   {categories.map(({ value, label, emoji }) => (
                     <button
                       key={value}
                       type="button"
                       onClick={() => setCategory(value)}
-                      className={cn(
-                        "flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
-                        category === value
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                      )}
+                      className={cn(chip, category === value ? chipActive : chipIdle)}
                     >
                       <span>{emoji}</span>
                       {label}
@@ -176,7 +207,7 @@ export function MimoDetailModal({
                   <button
                     type="button"
                     onClick={() => setCreatingCategory(true)}
-                    className="flex items-center gap-1 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-2.5 py-1.5 text-xs font-medium text-primary transition-all hover:border-primary hover:bg-primary/10"
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:border-primary hover:bg-primary/10"
                     aria-label="Criar nova categoria"
                   >
                     <Plus className="h-3 w-3" />
@@ -185,65 +216,34 @@ export function MimoDetailModal({
                 </div>
               </div>
 
-              {/* Status toggles */}
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setOwned(!owned)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-all",
-                      owned
-                        ? "border-green-500/50 bg-green-500/10"
-                        : "border-transparent bg-muted/50"
-                    )}
-                  >
-                    <div className={cn(
-                      "flex h-6 w-6 items-center justify-center rounded-md",
-                      owned ? "bg-green-500 text-white" : "bg-muted border border-border"
-                    )}>
-                      {owned && <Check className="h-3.5 w-3.5" />}
-                    </div>
-                    <div>
-                      <p className={cn("text-xs font-semibold", owned ? "text-green-500" : "text-foreground")}>
-                        Tenho
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">Ja possuo</p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => owned && setFinished(!finished)}
-                    disabled={!owned}
-                    className={cn(
-                      "flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-all",
-                      !owned && "cursor-not-allowed opacity-40",
-                      finished && owned
-                        ? "border-orange-500/50 bg-orange-500/10"
-                        : "border-transparent bg-muted/50"
-                    )}
-                  >
-                    <div className={cn(
-                      "flex h-6 w-6 items-center justify-center rounded-md",
-                      finished && owned ? "bg-orange-500 text-white" : "bg-muted border border-border"
-                    )}>
-                      {finished && owned && <AlertTriangle className="h-3.5 w-3.5" />}
-                    </div>
-                    <div>
-                      <p className={cn("text-xs font-semibold", finished && owned ? "text-orange-500" : "text-foreground")}>
-                        Acabou
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">Precisa repor</p>
-                    </div>
-                  </button>
+              {/* Status — segmented iOS-style */}
+              <div className="space-y-2">
+                <Label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Status
+                </Label>
+                <div className="grid grid-cols-3 gap-1 rounded-full bg-muted/50 p-1">
+                  {STATUS_OPTS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setStatus(opt.value)}
+                      className={cn(
+                        "relative inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold transition-all",
+                        status === opt.value
+                          ? "bg-card text-foreground shadow-sm ring-1 ring-border"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <span className={status === opt.value ? opt.color : ""}>{opt.icon}</span>
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
               {/* Link */}
               <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <Label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   <ExternalLink className="h-3 w-3" />
                   Link de compra
                 </Label>
@@ -252,14 +252,15 @@ export function MimoDetailModal({
                     placeholder="https://..."
                     value={link}
                     onChange={(e) => setLink(e.target.value)}
-                    className="h-9"
+                    className="h-10"
                   />
                   {link && (
                     <a
                       href={link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border hover:bg-accent"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border transition-colors hover:bg-accent"
+                      aria-label="Abrir link"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
@@ -269,24 +270,26 @@ export function MimoDetailModal({
 
               {/* Notes */}
               <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Anotacoes (opcional)</Label>
+                <Label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Anotações
+                </Label>
                 <Textarea
-                  placeholder="Tom, tamanho, preferencia..."
+                  placeholder="Tom, tamanho, preferência..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="min-h-[60px] resize-none text-sm"
+                  className="min-h-[72px] resize-none text-sm"
                 />
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+              <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
                 {!isNew && onDelete && mimo && (
                   <button
                     onClick={async () => {
                       await onDelete(mimo.id);
                       onClose();
                     }}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-red-500/70 transition hover:bg-red-500/10 hover:text-red-500"
+                    className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs text-muted-foreground/70 transition-colors hover:bg-red-500/10 hover:text-red-500"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     Remover
@@ -295,9 +298,9 @@ export function MimoDetailModal({
                 <button
                   onClick={handleSave}
                   disabled={!name.trim() || saving}
-                  className="ml-auto rounded-xl bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition disabled:opacity-50"
+                  className={cn(btnPrimary, "ml-auto")}
                 >
-                  {saving ? "Salvando..." : isNew ? "Adicionar" : "Salvar"}
+                  {saving ? "Salvando…" : isNew ? "Adicionar" : "Salvar"}
                 </button>
               </div>
             </div>

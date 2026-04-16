@@ -7,17 +7,19 @@ import { cn } from "@/lib/utils";
 
 interface MimoImageUploadProps {
   value: string | null;
-  /** Called after successful upload with the new public URL, or null on remove. */
   onChange: (url: string | null) => void;
-  /** When true, pasted/dropped images are also accepted globally on the parent modal. */
   enableGlobalPaste?: boolean;
 }
 
 /**
- * Mobile-first image input. Tap → native picker (gallery/camera).
- * Desktop also supports drag-and-drop + Ctrl+V paste from clipboard.
+ * Premium image drop zone.
+ * Mobile tap → gallery/câmera nativa. Desktop: drag-and-drop + ⌘/Ctrl+V paste.
  */
-export function MimoImageUpload({ value, onChange, enableGlobalPaste = true }: MimoImageUploadProps) {
+export function MimoImageUpload({
+  value,
+  onChange,
+  enableGlobalPaste = true,
+}: MimoImageUploadProps) {
   const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -35,7 +37,6 @@ export function MimoImageUpload({ value, onChange, enableGlobalPaste = true }: M
       }
       setUploading(true);
       try {
-        // If replacing an existing photo, remove the old one (best-effort).
         const previous = value;
         const url = await uploadMimoImage(file, user.id);
         onChange(url);
@@ -63,7 +64,6 @@ export function MimoImageUpload({ value, onChange, enableGlobalPaste = true }: M
     if (prev) deleteMimoImage(prev).catch(() => void 0);
   };
 
-  // Desktop drag-and-drop
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(true);
@@ -76,7 +76,6 @@ export function MimoImageUpload({ value, onChange, enableGlobalPaste = true }: M
     if (file) handleFile(file);
   };
 
-  // Desktop paste (Ctrl+V / Cmd+V) from clipboard anywhere while modal is open
   useEffect(() => {
     if (!enableGlobalPaste) return;
     const onPaste = (e: ClipboardEvent) => {
@@ -103,7 +102,7 @@ export function MimoImageUpload({ value, onChange, enableGlobalPaste = true }: M
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={cn(
-        "relative h-48 overflow-hidden rounded-t-2xl sm:h-56",
+        "relative h-52 overflow-hidden rounded-t-3xl sm:h-60",
         dragActive && "ring-2 ring-primary ring-offset-2 ring-offset-card"
       )}
     >
@@ -118,25 +117,28 @@ export function MimoImageUpload({ value, onChange, enableGlobalPaste = true }: M
       {value ? (
         <>
           <img src={value} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-card/90 via-card/10 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-card/85 via-card/10 to-transparent" />
 
-          {/* Overlay actions */}
           <div className="absolute bottom-3 right-3 flex gap-2">
             <button
               type="button"
               onClick={onPick}
               disabled={uploading}
-              className="flex h-9 items-center gap-1.5 rounded-full bg-black/60 px-3 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/80 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-black/55 px-3.5 text-xs font-semibold text-white backdrop-blur-md ring-1 ring-white/10 transition-all hover:bg-black/75 disabled:opacity-50"
             >
-              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+              {uploading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ImagePlus className="h-3.5 w-3.5" />
+              )}
               Trocar
             </button>
             <button
               type="button"
               onClick={onRemove}
               disabled={uploading}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-red-500/80 disabled:opacity-50"
               aria-label="Remover foto"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-md ring-1 ring-white/10 transition-all hover:bg-red-500/80 disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -147,26 +149,37 @@ export function MimoImageUpload({ value, onChange, enableGlobalPaste = true }: M
           type="button"
           onClick={onPick}
           disabled={uploading}
-          className="group flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-pink-500/25 via-purple-500/25 to-rose-500/25 transition hover:from-pink-500/40 hover:via-purple-500/40 hover:to-rose-500/40"
+          className="group relative flex h-full w-full flex-col items-center justify-center overflow-hidden"
         >
-          {uploading ? (
-            <>
-              <Loader2 className="h-8 w-8 animate-spin text-pink-200" />
-              <p className="text-xs text-white/80">Enviando...</p>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 text-pink-200">
-                <Camera className="h-6 w-6" />
-                <Sparkles className="h-4 w-4" />
-              </div>
-              <p className="text-sm font-medium text-white/90">Adicionar foto</p>
-              <p className="text-[10px] text-white/60">
-                <span className="sm:hidden">Tire ou escolha da galeria</span>
-                <span className="hidden sm:inline">Clique, arraste aqui ou cole (Ctrl+V)</span>
-              </p>
-            </>
-          )}
+          {/* blurred orbs */}
+          <div className="absolute inset-0 bg-ambient-rose" />
+          <div className="absolute left-[10%] top-[18%] h-44 w-44 rounded-full bg-[oklch(0.68_0.22_340)] opacity-45 blur-3xl transition-transform duration-700 group-hover:scale-110" />
+          <div className="absolute right-[12%] bottom-[8%] h-36 w-36 rounded-full bg-[oklch(0.78_0.16_22)] opacity-40 blur-3xl transition-transform duration-700 group-hover:scale-110" />
+
+          <div className="relative flex flex-col items-center gap-3">
+            {uploading ? (
+              <>
+                <Loader2 className="h-8 w-8 animate-spin text-white" />
+                <p className="text-sm font-medium text-white/90">Enviando…</p>
+              </>
+            ) : (
+              <>
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/12 ring-1 ring-white/20 backdrop-blur-md transition-transform duration-300 group-hover:scale-105">
+                  <Camera className="h-6 w-6 text-white" strokeWidth={1.5} />
+                </div>
+                <div className="text-center">
+                  <p className="flex items-center justify-center gap-1.5 text-[15px] font-semibold text-white">
+                    Adicionar foto
+                    <Sparkles className="h-3.5 w-3.5 text-white/70" />
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-white/70">
+                    <span className="sm:hidden">Toque para tirar ou escolher</span>
+                    <span className="hidden sm:inline">Clique, arraste ou cole (⌘V)</span>
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
         </button>
       )}
     </div>

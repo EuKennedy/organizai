@@ -1,108 +1,87 @@
-import { useRef } from "react";
-import { ChevronLeft, ChevronRight, Film } from "lucide-react";
+import { Film, Star } from "lucide-react";
 import { posterUrl } from "@/lib/tmdb";
+import { MediaCarouselShell } from "@/components/media-carousel-shell";
 import { cn } from "@/lib/utils";
 import type { Movie } from "@/types";
 
 interface MovieCarouselProps {
+  eyebrow?: string;
   title: string;
   movies: Movie[];
   onSelect: (movie: Movie) => void;
 }
 
-export function MovieCarousel({ title, movies, onSelect }: MovieCarouselProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const scroll = (direction: "left" | "right") => {
-    if (!scrollRef.current) return;
-    const amount = scrollRef.current.clientWidth * 0.75;
-    scrollRef.current.scrollBy({
-      left: direction === "left" ? -amount : amount,
-      behavior: "smooth",
-    });
-  };
-
+export function MovieCarousel({ eyebrow, title, movies, onSelect }: MovieCarouselProps) {
   if (movies.length === 0) return null;
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between px-1">
-        <h2 className="text-base font-semibold tracking-tight sm:text-lg">
-          {title}
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {movies.length}
-          </span>
-        </h2>
-        <div className="hidden gap-1 sm:flex">
-          <button
-            onClick={() => scroll("left")}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-foreground/50 transition-colors hover:bg-white/10 hover:text-foreground"
+    <MediaCarouselShell eyebrow={eyebrow} title={title} count={movies.length}>
+      {movies.map((movie) => (
+        <PosterCard key={movie.id} movie={movie} onSelect={onSelect} />
+      ))}
+    </MediaCarouselShell>
+  );
+}
+
+function PosterCard({ movie, onSelect }: { movie: Movie; onSelect: (m: Movie) => void }) {
+  const hasRating = movie.personal_rating != null && movie.personal_rating > 0;
+  const score = Number(movie.tmdb_score);
+
+  return (
+    <button
+      onClick={() => onSelect(movie)}
+      className="group relative flex-none snap-start text-left"
+    >
+      <div className="relative w-[140px] overflow-hidden rounded-2xl ring-1 ring-white/5 shadow-lg shadow-black/30 transition-all duration-300 group-hover:shadow-2xl group-hover:shadow-black/50 group-hover:ring-primary/30 sm:w-[172px] lg:w-[196px]">
+        {movie.poster_path ? (
+          <img
+            src={posterUrl(movie.poster_path, "w342")}
+            alt={movie.title}
+            loading="lazy"
+            className="aspect-[2/3] w-full object-cover transition-transform duration-[450ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:scale-[1.05]"
+          />
+        ) : (
+          <div className="flex aspect-[2/3] w-full items-center justify-center bg-gradient-to-br from-muted to-muted/40">
+            <Film className="h-10 w-10 text-muted-foreground/30" strokeWidth={1.25} />
+          </div>
+        )}
+
+        {/* Gradient permanente inferior — título sempre legível */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/15 to-transparent" />
+
+        {/* Score/rating — UM badge por vez */}
+        {hasRating ? (
+          <div className="absolute right-2 top-2 flex items-center gap-0.5 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-semibold text-yellow-400 backdrop-blur-md ring-1 ring-white/10">
+            <Star className="h-2.5 w-2.5" fill="currentColor" />
+            {movie.personal_rating}
+          </div>
+        ) : score > 0 ? (
+          <div
+            className={cn(
+              "absolute right-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold backdrop-blur-md ring-1 ring-white/10 tabular",
+              score >= 7
+                ? "bg-emerald-500/90 text-white"
+                : score >= 5
+                ? "bg-amber-500/90 text-white"
+                : "bg-zinc-600/90 text-white"
+            )}
           >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => scroll("right")}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-foreground/50 transition-colors hover:bg-white/10 hover:text-foreground"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+            {score.toFixed(1)}
+          </div>
+        ) : null}
+
+        {/* Título dentro do poster */}
+        <div className="absolute inset-x-0 bottom-0 p-3">
+          <p className="text-[13px] font-semibold leading-tight text-white line-clamp-2 drop-shadow-md sm:text-sm">
+            {movie.title}
+          </p>
+          {movie.release_year > 0 && (
+            <p className="mt-1 text-[10.5px] font-medium tracking-wide text-white/60 tabular">
+              {movie.release_year}
+            </p>
+          )}
         </div>
       </div>
-
-      <div
-        ref={scrollRef}
-        className="scrollbar-hide flex gap-3 overflow-x-auto scroll-smooth pb-2 sm:gap-4"
-      >
-        {movies.map((movie) => (
-          <button
-            key={movie.id}
-            onClick={() => onSelect(movie)}
-            className="group relative flex-none"
-          >
-            <div className="relative w-28 overflow-hidden rounded-lg sm:w-36 lg:w-40">
-              {movie.poster_path ? (
-                <img
-                  src={posterUrl(movie.poster_path, "w342")}
-                  alt={movie.title}
-                  className="aspect-[2/3] w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
-                  <Film className="h-8 w-8 text-muted-foreground/20" />
-                </div>
-              )}
-              {/* Hover gradient */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-              {/* Rating badge */}
-              {movie.personal_rating && (
-                <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400 backdrop-blur-sm">
-                  <span>★</span>
-                  {movie.personal_rating}
-                </div>
-              )}
-              {/* TMDB score */}
-              <div className={cn(
-                "absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur-sm",
-                movie.tmdb_score >= 7
-                  ? "bg-green-500/20 text-green-400"
-                  : movie.tmdb_score >= 5
-                    ? "bg-yellow-500/20 text-yellow-400"
-                    : "bg-red-500/20 text-red-400"
-              )}>
-                {Number(movie.tmdb_score).toFixed(1)}
-              </div>
-              {/* Title on hover */}
-              <div className="absolute inset-x-0 bottom-0 p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                <p className="text-xs font-medium text-white line-clamp-2">{movie.title}</p>
-              </div>
-            </div>
-            <p className="mt-1.5 w-28 truncate text-left text-xs text-foreground/70 sm:w-36 lg:w-40">
-              {movie.title}
-            </p>
-          </button>
-        ))}
-      </div>
-    </section>
+    </button>
   );
 }

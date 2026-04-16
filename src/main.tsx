@@ -15,7 +15,16 @@ createRoot(document.getElementById("root")!).render(
         <AuthProvider>
           <TooltipProvider>
             <App />
-            <Toaster richColors position="bottom-right" />
+            <Toaster
+              richColors
+              position="top-center"
+              mobileOffset={{ top: "calc(3.5rem + env(safe-area-inset-top))" }}
+              toastOptions={{
+                classNames: {
+                  toast: "!rounded-2xl !border !border-border !shadow-2xl !backdrop-blur-md",
+                },
+              }}
+            />
           </TooltipProvider>
         </AuthProvider>
       </ThemeProvider>

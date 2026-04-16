@@ -14,7 +14,7 @@ interface CreateCategoryDialogProps {
 
 const EMOJI_SUGGESTIONS = [
   "💄", "✨", "💅", "👄", "🧴", "🌺", "🌷", "🎀", "💎", "👑",
-  "🫧", "🪞", "💆", "👁️", "💋", "🌸", "🧼", "🧖", "🩰", "🧴",
+  "🫧", "🪞", "💆", "👁️", "💋", "🌸", "🧼", "🧖", "🩰", "💝",
 ];
 
 export function CreateCategoryDialog({ open, onClose, onCreate }: CreateCategoryDialogProps) {

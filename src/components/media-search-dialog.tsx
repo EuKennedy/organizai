@@ -66,23 +66,23 @@ export function MediaSearchDialog<T>({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por titulo..."
+            placeholder="Buscar por título..."
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
-            className="pl-9"
+            className="h-11 pl-10 text-[15px]"
             autoFocus
           />
         </div>
-        <div className="max-h-[50vh] overflow-y-auto space-y-1">
+        <div className="max-h-[55vh] space-y-1 overflow-y-auto pr-1">
           {searching && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
           )}
           {!searching && results.length === 0 && query.trim() && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="py-10 text-center text-sm text-muted-foreground">
               Nenhum resultado encontrado
             </p>
           )}
@@ -93,21 +93,21 @@ export function MediaSearchDialog<T>({
                 <button
                   key={i}
                   onClick={() => handleSelect(item)}
-                  className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-accent"
+                  className="flex w-full items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-accent"
                 >
                   {poster ? (
                     <img
                       src={posterUrl(poster, "w185")}
                       alt={itemTitle}
-                      className="h-16 w-11 rounded object-cover"
+                      className="h-[72px] w-12 rounded-lg object-cover ring-1 ring-white/5"
                     />
                   ) : (
-                    <div className="flex h-16 w-11 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
-                      N/A
+                    <div className="flex h-[72px] w-12 items-center justify-center rounded-lg bg-muted text-[10px] text-muted-foreground">
+                      s/ capa
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{itemTitle}</p>
+                    <p className="truncate text-[14px] font-semibold">{itemTitle}</p>
                     <p className="text-xs text-muted-foreground">{subtitle}</p>
                   </div>
                 </button>
