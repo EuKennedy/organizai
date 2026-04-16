@@ -7,6 +7,7 @@ import { PageHero } from "@/components/page-hero";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlbumCard } from "@/components/gallery/album-card";
+import { AlbumReorderRow } from "@/components/gallery/album-reorder-row";
 import { CreateAlbumDialog } from "@/components/gallery/create-album-dialog";
 import { btnPrimary, btnPrimarySm, btnSecondarySm } from "@/lib/ui";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,8 @@ export function GalleryPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
 
-  // Sync local order whenever albums change and we're not mid-drag
+  // Sync local order when leaving/entering reorder mode or when data changes
+  // (but not during a drag, to avoid fighting the user).
   useEffect(() => {
     if (!draggingId) {
       setLocalOrder(albums);
@@ -74,6 +76,21 @@ export function GalleryPage() {
       }
     }
     setReorderMode(false);
+  };
+
+  const moveBy = (id: string, delta: number) => {
+    setLocalOrder((prev) => {
+      const idx = prev.findIndex((a) => a.id === id);
+      if (idx < 0) return prev;
+      const target = idx + delta;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = prev.slice();
+      const item = next[idx];
+      if (!item) return prev;
+      next.splice(idx, 1);
+      next.splice(target, 0, item);
+      return next;
+    });
   };
 
   const heroBackdrop = useMemo(() => {
@@ -156,69 +173,79 @@ export function GalleryPage() {
       )}
 
       {/* Reorder mode banner */}
-      {!loading && albums.length > 0 && reorderMode && (
-        <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-2.5">
-          <p className="text-[12.5px] text-foreground/85">
-            <span className="font-semibold text-primary">Modo reordenar ativo</span>
-            <span className="hidden text-muted-foreground sm:inline">
-              {" "}
-              — arraste os murais para reorganizar.
-            </span>
-          </p>
+      {!loading && albums.length > 1 && reorderMode && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] font-semibold text-primary">
+              Modo reordenar ativo
+            </p>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+              <span className="hidden sm:inline">
+                Arraste pela alça (⋮⋮) ou solte pra reorganizar.
+              </span>
+              <span className="sm:hidden">
+                Toque nas setas ▲▼ pra mover cada mural.
+              </span>
+            </p>
+          </div>
           <button
             onClick={() => {
               setLocalOrder(albums);
               setReorderMode(false);
             }}
-            className="text-[11.5px] text-muted-foreground transition-colors hover:text-foreground"
+            className="shrink-0 rounded-full px-3 py-1.5 text-[11.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             Cancelar
           </button>
         </div>
       )}
 
-      {!loading && albums.length > 0 && (
-        <>
-          {reorderMode ? (
-            <Reorder.Group
-              axis="y"
-              values={localOrder}
-              onReorder={setLocalOrder}
-              className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6"
+      {/* Normal grid */}
+      {!loading && albums.length > 0 && !reorderMode && (
+        <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
+          {albums.map((album) => (
+            <AlbumCard
+              key={album.id}
+              album={album}
+              cover={coverFor(album)}
+              photoCount={(photosByAlbum[album.id] ?? []).length}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Reorder view — always single column list */}
+      {!loading && albums.length > 1 && reorderMode && (
+        <Reorder.Group
+          axis="y"
+          values={localOrder}
+          onReorder={setLocalOrder}
+          className="mx-auto flex max-w-2xl flex-col gap-2"
+        >
+          {localOrder.map((album, i) => (
+            <Reorder.Item
+              key={album.id}
+              value={album}
+              dragListener={true}
+              onDragStart={() => setDraggingId(album.id)}
+              onDragEnd={() => setDraggingId(null)}
+              whileDrag={{ zIndex: 30 }}
+              transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+              className="touch-none select-none"
             >
-              {localOrder.map((album) => (
-                <Reorder.Item
-                  key={album.id}
-                  value={album}
-                  onDragStart={() => setDraggingId(album.id)}
-                  onDragEnd={() => setDraggingId(null)}
-                  whileDrag={{ zIndex: 30 }}
-                  transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-                  className="touch-none select-none"
-                >
-                  <AlbumCard
-                    album={album}
-                    cover={coverFor(album)}
-                    photoCount={(photosByAlbum[album.id] ?? []).length}
-                    reorderMode
-                    dragging={draggingId === album.id}
-                  />
-                </Reorder.Item>
-              ))}
-            </Reorder.Group>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
-              {albums.map((album) => (
-                <AlbumCard
-                  key={album.id}
-                  album={album}
-                  cover={coverFor(album)}
-                  photoCount={(photosByAlbum[album.id] ?? []).length}
-                />
-              ))}
-            </div>
-          )}
-        </>
+              <AlbumReorderRow
+                album={album}
+                cover={coverFor(album)}
+                photoCount={(photosByAlbum[album.id] ?? []).length}
+                position={i + 1}
+                total={localOrder.length}
+                dragging={draggingId === album.id}
+                onMoveUp={() => moveBy(album.id, -1)}
+                onMoveDown={() => moveBy(album.id, 1)}
+              />
+            </Reorder.Item>
+          ))}
+        </Reorder.Group>
       )}
 
       <CreateAlbumDialog
