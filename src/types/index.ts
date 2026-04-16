@@ -85,6 +85,89 @@ export interface GoalDeposit {
   created_at: string;
 }
 
+// =============================================================================
+// GALLERY
+// =============================================================================
+
+export type GalleryLayout = "masonry" | "mosaic" | "collage" | "grid";
+
+export interface GalleryAlbum {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  layout: GalleryLayout;
+  cover_photo_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GalleryPhoto {
+  id: string;
+  user_id: string;
+  album_id: string;
+  storage_path: string;
+  public_url: string;
+  width: number;
+  height: number;
+  caption: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export const GALLERY_LAYOUTS: { value: GalleryLayout; label: string; description: string }[] = [
+  { value: "masonry", label: "Mosaico", description: "Alturas variadas, estilo Pinterest" },
+  { value: "mosaic", label: "Mural", description: "Retângulos em blocos irregulares" },
+  { value: "collage", label: "Colagem", description: "Sobreposição com rotações sutis" },
+  { value: "grid", label: "Grade", description: "Quadrados uniformes, minimalista" },
+];
+
+// =============================================================================
+// LETTERS
+// =============================================================================
+
+export type LetterMood =
+  | "amor"
+  | "saudade"
+  | "celebracao"
+  | "desabafo"
+  | "apoio"
+  | "desculpas"
+  | "outro";
+
+export interface Letter {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  author: string | null;
+  recipient: string | null;
+  mood: LetterMood;
+  created_at: string;
+  updated_at: string;
+}
+
+export const LETTER_MOODS: { value: LetterMood; label: string; emoji: string; tone: string }[] = [
+  { value: "amor",       label: "Declaração",  emoji: "💌", tone: "coral" },
+  { value: "saudade",    label: "Saudade",     emoji: "🌙", tone: "plum" },
+  { value: "celebracao", label: "Celebração",  emoji: "🎉", tone: "gold" },
+  { value: "desabafo",   label: "Desabafo",    emoji: "🌧️", tone: "teal" },
+  { value: "apoio",      label: "Apoio",       emoji: "🤝", tone: "gold" },
+  { value: "desculpas",  label: "Desculpas",   emoji: "🕊️", tone: "teal" },
+  { value: "outro",      label: "Outro",       emoji: "✉️", tone: "coral" },
+];
+
+export const LETTER_MOOD_MAP: Record<
+  LetterMood,
+  { label: string; emoji: string; tone: string }
+> = (() => {
+  const map = {} as Record<LetterMood, { label: string; emoji: string; tone: string }>;
+  for (const m of LETTER_MOODS) {
+    map[m.value] = { label: m.label, emoji: m.emoji, tone: m.tone };
+  }
+  return map;
+})();
+
 export type WeatherIcon = "sunny" | "rainy" | "snowy" | "cloudy";
 
 export const WEATHER_EMOJI: Record<WeatherIcon, string> = {

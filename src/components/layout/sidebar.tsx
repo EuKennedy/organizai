@@ -6,6 +6,8 @@ import {
   Receipt,
   Target,
   Sparkles,
+  Images,
+  Mail,
   LogOut,
   Sun,
   Moon,
@@ -22,6 +24,8 @@ const NAV_ITEMS = [
   { to: "/series", label: "Séries", icon: Tv },
   { to: "/dates", label: "Dates", icon: Heart },
   { to: "/mimos", label: "Mimos", icon: Sparkles },
+  { to: "/gallery", label: "Galeria", icon: Images },
+  { to: "/letters", label: "Textos", icon: Mail },
   { to: "/expenses", label: "Despesas", icon: Receipt },
   { to: "/goals", label: "Metas", icon: Target },
 ] as const;
@@ -31,6 +35,8 @@ const CURRENT_LABEL: Record<string, string> = {
   "/series": "Séries",
   "/dates": "Dates",
   "/mimos": "Mimos",
+  "/gallery": "Galeria",
+  "/letters": "Textos",
   "/expenses": "Despesas",
   "/goals": "Metas",
 };
@@ -51,7 +57,9 @@ export function Sidebar() {
     navigate("/login");
   };
 
-  const currentLabel = CURRENT_LABEL[location.pathname] ?? "OrganizAI";
+  const currentLabel =
+    CURRENT_LABEL[location.pathname] ??
+    (location.pathname.startsWith("/gallery/") ? "Galeria" : "OrganizAI");
 
   return (
     <>
