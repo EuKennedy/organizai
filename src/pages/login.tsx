@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import { Heart, ArrowRight, Loader2, RefreshCw, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { clearAuthStorage } from "@/lib/auth-storage";
+import { DiagnosticsDialog } from "@/components/diagnostics-dialog";
 import { cn } from "@/lib/utils";
 
 export function LoginPage() {
@@ -13,6 +14,7 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [diagOpen, setDiagOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,18 +115,30 @@ export function LoginPage() {
           OrganizAI · Vida a dois
         </p>
 
-        <button
-          type="button"
-          onClick={() => {
-            clearAuthStorage();
-            toast.success("Dados locais limpos. Tente entrar novamente.");
-            setTimeout(() => window.location.reload(), 600);
-          }}
-          className="mx-auto mt-4 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] text-muted-foreground/60 transition-colors hover:bg-muted/40 hover:text-muted-foreground"
-        >
-          <RefreshCw className="h-3 w-3" />
-          Problemas para entrar? Limpar dados e tentar de novo
-        </button>
+        <div className="mt-5 flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setDiagOpen(true)}
+            className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11.5px] font-semibold text-primary transition-colors hover:bg-primary/10"
+          >
+            <Stethoscope className="h-3 w-3" />
+            Login travou? Rodar diagnóstico
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              clearAuthStorage();
+              toast.success("Dados locais limpos. Tente entrar novamente.");
+              setTimeout(() => window.location.reload(), 600);
+            }}
+            className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[10.5px] text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+          >
+            <RefreshCw className="h-2.5 w-2.5" />
+            Limpar dados locais
+          </button>
+        </div>
+
+        <DiagnosticsDialog open={diagOpen} onClose={() => setDiagOpen(false)} />
       </motion.div>
     </div>
   );
