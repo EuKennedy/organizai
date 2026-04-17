@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, ArrowRight, Loader2 } from "lucide-react";
+import { Heart, ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
+import { clearAuthStorage } from "@/lib/auth-storage";
 import { cn } from "@/lib/utils";
 
 export function LoginPage() {
@@ -111,6 +112,19 @@ export function LoginPage() {
         <p className="mt-10 text-center text-[11px] uppercase tracking-[0.2em] text-muted-foreground/70">
           OrganizAI · Vida a dois
         </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            clearAuthStorage();
+            toast.success("Dados locais limpos. Tente entrar novamente.");
+            setTimeout(() => window.location.reload(), 600);
+          }}
+          className="mx-auto mt-4 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] text-muted-foreground/60 transition-colors hover:bg-muted/40 hover:text-muted-foreground"
+        >
+          <RefreshCw className="h-3 w-3" />
+          Problemas para entrar? Limpar dados e tentar de novo
+        </button>
       </motion.div>
     </div>
   );

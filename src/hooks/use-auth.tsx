@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { clearAuthStorage } from "@/lib/auth-storage";
 
 interface AuthContextType {
   user: User | null;
@@ -70,10 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       restored = true;
     };
 
-    // Watchdog: if Supabase.getSession() hangs, unblock the UI anyway.
+    // Watchdog: if Supabase.getSession() hangs, clear any corrupt local
+    // auth state (common on Safari/iOS after ITP purges) and unblock the
+    // UI so the user can sign in fresh.
     const watchdog = setTimeout(() => {
       if (!restored) {
-        console.warn("[auth] getSession timeout — proceeding without session");
+        console.warn(
+          "[auth] getSession timeout — clearing local auth state and proceeding"
+        );
+        clearAuthStorage();
+        setSession(null);
+        setUser(null);
         setLoading(false);
       }
     }, SESSION_RESTORE_TIMEOUT_MS);
@@ -82,7 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .getSession()
       .then(({ data }) => applySession(data.session))
       .catch((err) => {
-        console.error("[auth] getSession failed", err);
+        console.error(
+          "[auth] getSession failed — clearing local auth state",
+          err
+        );
+        clearAuthStorage();
+        setSession(null);
+        setUser(null);
         setLoading(false);
         restored = true;
       });
