@@ -19,27 +19,58 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/**
+ * Hard ceiling for session restore. If Supabase.getSession() hangs (flaky
+ * network, server hiccup, tab woken from sleep), we MUST unblock the UI
+ * instead of spinning forever. After this timeout we assume "no session"
+ * and let the user see the login page.
+ */
+const SESSION_RESTORE_TIMEOUT_MS = 8000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    let settled = false;
+
+    const finish = (s: Session | null) => {
+      if (settled) return;
+      settled = true;
       setSession(s);
       setUser(s?.user ?? null);
       setLoading(false);
-    });
+    };
+
+    // Watchdog — if Supabase never answers, release the UI.
+    const watchdog = setTimeout(() => {
+      if (!settled) {
+        console.warn("[auth] getSession timed out, proceeding without session");
+        finish(null);
+      }
+    }, SESSION_RESTORE_TIMEOUT_MS);
+
+    supabase.auth
+      .getSession()
+      .then(({ data }) => finish(data.session))
+      .catch((err) => {
+        console.error("[auth] getSession failed", err);
+        finish(null);
+      });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      setLoading(false);
+      // onAuthStateChange can fire before getSession resolves; treat it as
+      // authoritative and unblock.
+      finish(s);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(watchdog);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

@@ -9,15 +9,23 @@ export function useLetters() {
   const [loading, setLoading] = useState(true);
 
   const fetch = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from("letters")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setLetters((data as Letter[] | null) ?? []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from("letters")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      setLetters((data as Letter[] | null) ?? []);
+    } catch (err) {
+      console.error("[letters] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {

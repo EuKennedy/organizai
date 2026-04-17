@@ -9,15 +9,23 @@ export function useDates() {
   const [loading, setLoading] = useState(true);
 
   const fetchDates = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from("date_ideas")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setDates((data as DateIdea[] | null) ?? []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from("date_ideas")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      setDates((data as DateIdea[] | null) ?? []);
+    } catch (err) {
+      console.error("[dates] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {

@@ -9,15 +9,23 @@ export function useTransactions() {
   const [loading, setLoading] = useState(true);
 
   const fetchTransactions = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("date", { ascending: false });
-    setTransactions((data as Transaction[] | null) ?? []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("date", { ascending: false });
+      setTransactions((data as Transaction[] | null) ?? []);
+    } catch (err) {
+      console.error("[transactions] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {
@@ -52,23 +60,31 @@ export function useGoals() {
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const [goalsRes, depositsRes] = await Promise.all([
-      supabase
-        .from("financial_goals")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("goal_deposits")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-    ]);
-    setGoals((goalsRes.data as FinancialGoal[] | null) ?? []);
-    setDeposits((depositsRes.data as GoalDeposit[] | null) ?? []);
-    setLoading(false);
+    try {
+      const [goalsRes, depositsRes] = await Promise.all([
+        supabase
+          .from("financial_goals")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("goal_deposits")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+      ]);
+      setGoals((goalsRes.data as FinancialGoal[] | null) ?? []);
+      setDeposits((depositsRes.data as GoalDeposit[] | null) ?? []);
+    } catch (err) {
+      console.error("[goals] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {

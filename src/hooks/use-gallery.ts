@@ -18,25 +18,33 @@ export function useGallery() {
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const [albumsRes, photosRes] = await Promise.all([
-      supabase
-        .from("gallery_albums")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("gallery_photos")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true }),
-    ]);
-    setAlbums((albumsRes.data as GalleryAlbum[] | null) ?? []);
-    setPhotos((photosRes.data as GalleryPhoto[] | null) ?? []);
-    setLoading(false);
+    try {
+      const [albumsRes, photosRes] = await Promise.all([
+        supabase
+          .from("gallery_albums")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("gallery_photos")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true }),
+      ]);
+      setAlbums((albumsRes.data as GalleryAlbum[] | null) ?? []);
+      setPhotos((photosRes.data as GalleryPhoto[] | null) ?? []);
+    } catch (err) {
+      console.error("[gallery] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {

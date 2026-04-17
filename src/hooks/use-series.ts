@@ -9,15 +9,23 @@ export function useSeries() {
   const [loading, setLoading] = useState(true);
 
   const fetchSeries = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from("series")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setSeries((data as Series[] | null) ?? []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from("series")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      setSeries((data as Series[] | null) ?? []);
+    } catch (err) {
+      console.error("[series] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {

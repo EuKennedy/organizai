@@ -9,15 +9,23 @@ export function useMovies() {
   const [loading, setLoading] = useState(true);
 
   const fetchMovies = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from("movies")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setMovies((data as Movie[] | null) ?? []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from("movies")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      setMovies((data as Movie[] | null) ?? []);
+    } catch (err) {
+      console.error("[movies] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {

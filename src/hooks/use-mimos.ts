@@ -9,15 +9,23 @@ export function useMimos() {
   const [loading, setLoading] = useState(true);
 
   const fetchMimos = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from("mimos")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setMimos((data as Mimo[] | null) ?? []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from("mimos")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      setMimos((data as Mimo[] | null) ?? []);
+    } catch (err) {
+      console.error("[mimos] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {

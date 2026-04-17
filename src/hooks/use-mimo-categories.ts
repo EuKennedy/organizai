@@ -20,15 +20,23 @@ export function useMimoCategories() {
   const [loading, setLoading] = useState(true);
 
   const fetchCustoms = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from("mimo_categories")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true });
-    setCustoms((data as MimoCustomCategoryRow[] | null) ?? []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from("mimo_categories")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      setCustoms((data as MimoCustomCategoryRow[] | null) ?? []);
+    } catch (err) {
+      console.error("[mimo-categories] fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {
