@@ -19,13 +19,41 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-/**
- * Hard ceiling for session restore. If Supabase.getSession() hangs (flaky
- * network, server hiccup, tab woken from sleep), we MUST unblock the UI
- * instead of spinning forever. After this timeout we assume "no session"
- * and let the user see the login page.
- */
+/** Hard ceilings so the UI never hangs forever. */
 const SESSION_RESTORE_TIMEOUT_MS = 8000;
+const SIGNIN_TIMEOUT_MS = 15000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`__timeout__:${label}`)),
+      ms
+    );
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
+function friendlyError(err: unknown, fallback: string): string {
+  if (err instanceof Error) {
+    if (err.message.startsWith("__timeout__")) {
+      return "Tempo esgotado. Verifique sua conexão e tente de novo.";
+    }
+    if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+      return "Sem conexão com o servidor. Tente novamente.";
+    }
+    return err.message;
+  }
+  return fallback;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -33,38 +61,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let settled = false;
+    let restored = false;
 
-    const finish = (s: Session | null) => {
-      if (settled) return;
-      settled = true;
+    const applySession = (s: Session | null) => {
       setSession(s);
       setUser(s?.user ?? null);
       setLoading(false);
+      restored = true;
     };
 
-    // Watchdog — if Supabase never answers, release the UI.
+    // Watchdog: if Supabase.getSession() hangs, unblock the UI anyway.
     const watchdog = setTimeout(() => {
-      if (!settled) {
-        console.warn("[auth] getSession timed out, proceeding without session");
-        finish(null);
+      if (!restored) {
+        console.warn("[auth] getSession timeout — proceeding without session");
+        setLoading(false);
       }
     }, SESSION_RESTORE_TIMEOUT_MS);
 
     supabase.auth
       .getSession()
-      .then(({ data }) => finish(data.session))
+      .then(({ data }) => applySession(data.session))
       .catch((err) => {
         console.error("[auth] getSession failed", err);
-        finish(null);
+        setLoading(false);
+        restored = true;
       });
 
+    // Subscribe to EVERY auth change (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED).
+    // This keeps user/session in sync across the app's lifetime — not just
+    // during the initial restore.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, s) => {
-      // onAuthStateChange can fire before getSession resolves; treat it as
-      // authoritative and unblock.
-      finish(s);
+      applySession(s);
     });
 
     return () => {
@@ -74,17 +103,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        SIGNIN_TIMEOUT_MS,
+        "signIn"
+      );
+      if (error) {
+        // Normalize the most common Supabase messages to Portuguese.
+        const msg = error.message.toLowerCase();
+        if (msg.includes("invalid login credentials")) {
+          return { error: "Email ou senha incorretos" };
+        }
+        if (msg.includes("email not confirmed")) {
+          return { error: "Confirme seu email antes de entrar" };
+        }
+        return { error: error.message };
+      }
+      return { error: null };
+    } catch (err) {
+      return { error: friendlyError(err, "Erro ao entrar") };
+    }
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error?.message ?? null };
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.signUp({ email, password }),
+        SIGNIN_TIMEOUT_MS,
+        "signUp"
+      );
+      return { error: error?.message ?? null };
+    } catch (err) {
+      return { error: friendlyError(err, "Erro ao criar conta") };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await withTimeout(supabase.auth.signOut(), SIGNIN_TIMEOUT_MS, "signOut");
+    } catch (err) {
+      console.error("[auth] signOut failed", err);
+      // Still clear local state so the user isn't stuck.
+      setSession(null);
+      setUser(null);
+    }
   };
 
   return (

@@ -16,13 +16,18 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await signIn(email, password);
-    setLoading(false);
-    if (error) {
-      toast.error("Email ou senha incorretos");
-      return;
+    try {
+      const { error } = await signIn(email, password);
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      navigate("/");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro inesperado");
+    } finally {
+      setLoading(false);
     }
-    navigate("/");
   };
 
   return (
