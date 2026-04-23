@@ -1,139 +1,111 @@
 # OrganizAI
 
-**I know Supabase isn’t the most robust database choice, and I’m aware of its limitations in terms of scalability, cost, and potential security concerns. That said, this is a personal project, and I chose it for the sake of speed and simplicity — I didn’t want to deal with setting up a VPS or managing a dedicated database.
+> Personal project. Published openly because I like the idea of leaving my work
+> readable in public, not because I'm looking for contributions. The live
+> instance on GitHub Pages is mine — my data, my account. Feel free to read
+> the code, fork it, learn from it, build your own version if it helps.
 
-This project came from a real need my girlfriend and I had. Instead of relying on spreadsheets, I decided to build a small app for our own use.
-
-Feel free to explore the code, contribute, or fork the project and build your own version. At the end of the day, it’s all about learning, experimenting, and creating something useful.**
-
-> **Personal use project.** This app was born from a real need my girlfriend and I had — organizing movies, series, date ideas, finances, and beauty products in one place, without depending on scattered spreadsheets. We publish the source code openly because we believe in sharing, but **the instance you see on GitHub Pages is ours alone**: our data, our lists, our mimos.
-
-A couples organizer — movies, series, dates, beauty wishlist, and finances.
+A couples organizer my girlfriend and I use every day: movies, series, date
+ideas, photo murals, love letters, beauty wishlist, expenses and savings
+goals — all in one app instead of scattered spreadsheets.
 
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3FCF8E?logo=supabase&logoColor=white)
 
-## Modules
+## What's inside
 
-- **Movies** — TMDB search with director and cast, Netflix-style carousels by status, personal rating, dynamic genre filters
-- **Series** — Same pattern as movies + season/episode tracker
-- **Dates** — Plan dates with address, weather, date/time, and Google Maps link
-- **Mimos** (Beauty wishlist) — Cosmetics, skincare, accessories, piercings with "own / want / ran out" status and purchase links
-- **Expenses** — Monthly financial dashboard with category pie chart and transaction list
-- **Goals** — Savings goals with deposits, progress bar, and celebration on completion
+- **Movies / Series** — TMDB search with director and cast, Netflix-style
+  carousels by status, personal rating, dynamic genre filters. Series have
+  season / episode tracking.
+- **Dates** — Ideas with address, scheduled date/time, weather, Google Maps
+  link, and status lifecycle (idea → scheduled → done).
+- **Mimos** — beauty / skincare / accessory wishlist with "own / want / ran
+  out" status, product photos uploaded from the phone, user-defined categories.
+- **Gallery** — photo murals with four layouts (masonry, asymmetric mosaic,
+  Polaroid collage, uniform grid), cover picker, drag-to-reorder, full-screen
+  lightbox.
+- **Letters** — cartinhas with moods (declaration, saudade, apology, etc.),
+  reader/composer flow in serif editorial type.
+- **Expenses / Goals** — monthly dashboard with category pie chart; savings
+  goals with a deposit timeline and trash-to-undo per deposit.
 
-## Tech Stack
+## Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 19 + TypeScript (strict) + Vite 8 |
-| UI | Tailwind CSS v4 + shadcn/ui (new-york) |
-| Animations | Framer Motion |
+| UI | Tailwind CSS v4 + shadcn/ui, Framer Motion, Fraunces + Inter |
 | Charts | Recharts |
-| Backend | Supabase (PostgreSQL + Auth + Row Level Security) |
-| External API | TMDB (movies and series) |
-| Deploy | GitHub Pages via GitHub Actions |
+| Backend | Supabase (PostgreSQL + Auth + Storage + RLS) |
+| Proxy | Cloudflare Worker (optional, used only when a network blocks `*.supabase.co`) |
+| External API | TMDB |
+| Hosting | GitHub Pages via GitHub Actions |
 
-## Want to run your own instance?
+## Running your own instance
 
-This repository **contains no data, credentials, or databases of ours** — all private content lives in external services with Row Level Security enabled, accessible only by our personal accounts.
+This repo **contains no private data, no credentials, no databases**. The
+only identifying surface left is what Vite bakes into the public bundle at
+build time — `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` — which are
+public by design on the Supabase model (security comes from RLS, not from
+hiding these values).
 
-If you want to run your own OrganizAI instance (for yourself, your partner, your family), you must **create your own credentials**. Full step-by-step below.
+If you want to spin up a version for yourself:
 
-### Prerequisites
+1. Fork and clone the repo.
+2. `cp .env.example .env.local` and fill in **your** credentials.
+3. Create a free Supabase project, open SQL Editor, paste the content of
+   [`supabase/schema.sql`](supabase/schema.sql) and run it. It will create
+   all tables, RLS policies, indexes, triggers, and the `mimos-photos` +
+   `gallery-photos` storage buckets with their policies.
+4. In Supabase → **Authentication** → **Sign In / Providers**, turn off
+   "Allow new users to sign up" — this app is invite-only. Add your users
+   manually under **Authentication → Users → Add user**.
+5. Create a free [TMDB](https://www.themoviedb.org/settings/api) API key
+   (v3 auth) and paste it into `.env.local` as `VITE_TMDB_API_KEY`.
+6. `npm install && npm run dev`.
 
-- Node.js 22+
-- A free [Supabase](https://supabase.com) account (create yours)
-- A free [TMDB API Key](https://www.themoviedb.org/settings/api) (v3 auth — create yours)
+### Deploying to GitHub Pages (your fork)
 
-### Local installation
+1. In your fork → **Settings** → **Pages** → source: GitHub Actions.
+2. **Settings → Secrets and variables → Actions**, add three secrets:
+   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_TMDB_API_KEY`.
+3. If your fork isn't named `organizai`, update the base path in
+   [`vite.config.ts`](vite.config.ts) and [`src/main.tsx`](src/main.tsx).
+4. Push — Actions builds and deploys. App goes live at
+   `https://YOUR_USER.github.io/YOUR_REPO/`.
 
-```bash
-# 1. Fork this repository on GitHub, then clone YOUR fork
-git clone https://github.com/YOUR_USERNAME/organizai.git
-cd organizai
+### Optional: Cloudflare Worker proxy
 
-# 2. Install dependencies
-npm install
+Some mobile carriers / routers silently drop traffic to `*.supabase.co`.
+The [cloudflare-worker/](cloudflare-worker/) folder has a proxy Worker you
+can deploy in 10 minutes to route around that — see the README there.
 
-# 3. Set up your environment variables
-cp .env.example .env.local
-# Edit .env.local with YOUR credentials (not ours)
-```
+## Security notes
 
-### Supabase setup (your own project)
-
-1. Create a new project at [supabase.com](https://supabase.com/dashboard) (free tier is enough)
-2. Once the project is ready, open **SQL Editor** > **New query** and paste the entire content of [`supabase/schema.sql`](supabase/schema.sql). Click **Run**. This creates all tables, RLS policies, indexes, and triggers.
-3. Go to **Project Settings** > **API** and copy:
-   - `Project URL` → this is your `VITE_SUPABASE_URL`
-   - `anon public` key → this is your `VITE_SUPABASE_ANON_KEY`
-4. Paste both into your `.env.local`
-5. (Recommended) Go to **Authentication** > **Sign In / Providers** and toggle **"Allow new users to sign up"** OFF — this makes the app invite-only
-6. Create user accounts manually at **Authentication** > **Users** > **Add user** (use "Auto Confirm User" to skip email verification)
-
-### TMDB setup (your own API key)
-
-1. Create an account at [themoviedb.org](https://www.themoviedb.org) and request an API key at [Settings > API](https://www.themoviedb.org/settings/api)
-2. Copy the **API Key (v3 auth)** — the short one, not the JWT token
-3. Paste it into `.env.local` as `VITE_TMDB_API_KEY`
-
-### Run it
-
-```bash
-npm run dev
-# Open http://localhost:5173/organizai/
-```
-
-Note the `/organizai/` suffix — that's the base path configured for GitHub Pages deployment. If you rename your fork, see the deploy section below.
-
-### Environment variables
-
-All must be set in `.env.local` (gitignored) or as GitHub Secrets for CI/CD. See [`.env.example`](.env.example).
-
-| Variable | Description |
-|----------|-------------|
-| `VITE_SUPABASE_URL` | URL of YOUR Supabase project |
-| `VITE_SUPABASE_ANON_KEY` | Anon public key of YOUR Supabase project |
-| `VITE_TMDB_API_KEY` | YOUR TMDB API key (v3 auth) |
-
-### Deploy to GitHub Pages
-
-1. Fork this repo (step already done if you followed the install)
-2. Go to **Settings** > **Pages** > **Source: GitHub Actions**
-3. Go to **Settings** > **Secrets and variables** > **Actions** > **New repository secret**, then add:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_TMDB_API_KEY`
-4. **If your fork is named something other than `organizai`**, update the base path:
-   - In [`vite.config.ts`](vite.config.ts): change `base: "/organizai/"` to `base: "/YOUR_REPO_NAME/"`
-   - In [`src/main.tsx`](src/main.tsx): change `basename="/organizai"` to `basename="/YOUR_REPO_NAME"`
-5. Push to `main` — the GitHub Actions workflow will build and deploy automatically
-6. Your app will be live at `https://YOUR_USERNAME.github.io/YOUR_REPO_NAME/`
-
-## Contributing
-
-Feel free to open issues or PRs with improvements, bug fixes, or new ideas. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-**Important:** no PR should contain credentials, personal data, or references to private instances. All development should be done against your own test Supabase project.
+- **RLS** is on for every user-facing table; each row is scoped by
+  `auth.uid() = user_id`.
+- **Sign-ups are disabled** on the live instance. The app is invite-only.
+- **No secret material in this repository.** `.env.local` is gitignored
+  from the first commit; verify with `git ls-files | grep env`. The values
+  that end up in the public JS bundle (`VITE_SUPABASE_URL` and the anon
+  key) are intentionally public — they're safe as long as RLS is active.
+- **Storage buckets** are public-read but per-user-write: every upload
+  goes under `{user_id}/...` and the insert/update/delete policies check
+  `auth.uid()::text = (storage.foldername(name))[1]`.
+- **Auto-recovery** on the login side: if the client's refresh token is
+  invalid/expired, a global fetch interceptor clears local auth and sends
+  the user to `/login` instead of showing an empty account.
 
 ## Scripts
 
 ```bash
-npm run dev      # Dev server with HMR
-npm run build    # Production build
-npm run preview  # Preview the build locally
-npm run lint     # ESLint
+npm run dev      # dev server with HMR
+npm run build    # production build
+npm run preview  # preview the build locally
+npm run lint     # eslint
 ```
-
-## Security
-
-- **Row Level Security (RLS)** enabled on every table — each user only accesses their own data
-- **No secrets in the repository** — all credentials live in `.env.local` or GitHub Secrets
-- **Public sign-ups disabled** on our instance (accounts added manually by us)
-- `.env.local` is gitignored from the first commit — verify with `git ls-files | grep env` before any commit
 
 ## License
 

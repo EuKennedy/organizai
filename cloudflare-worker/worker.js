@@ -17,7 +17,8 @@
  *   7. Push qualquer commit pra re-rodar o deploy do GitHub Pages
  */
 
-const SUPABASE_URL = "https://dbyfyevuvavyfpyznkuy.supabase.co";
+// Replace with your own Supabase project URL before deploying.
+const SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co";
 
 // CORS aberto — o próprio Worker serve ao app front-end.
 const CORS_HEADERS = {
