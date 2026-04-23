@@ -1,5 +1,6 @@
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
+  Home,
   Film,
   Tv,
   Heart,
@@ -20,6 +21,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 
 const NAV_ITEMS = [
+  { to: "/home", label: "Início", icon: Home },
   { to: "/movies", label: "Filmes", icon: Film },
   { to: "/series", label: "Séries", icon: Tv },
   { to: "/dates", label: "Dates", icon: Heart },
@@ -31,6 +33,7 @@ const NAV_ITEMS = [
 ] as const;
 
 const CURRENT_LABEL: Record<string, string> = {
+  "/home": "Início",
   "/movies": "Filmes",
   "/series": "Séries",
   "/dates": "Dates",

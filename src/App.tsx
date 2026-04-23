@@ -11,6 +11,7 @@ import { MimosPage } from "@/pages/mimos";
 import { GalleryPage } from "@/pages/gallery";
 import { GalleryAlbumPage } from "@/pages/gallery-album";
 import { LettersPage } from "@/pages/letters";
+import { HomePage } from "@/pages/home";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -48,7 +49,8 @@ export function App() {
           <ProtectedRoute>
             <AppLayout>
               <Routes>
-                <Route path="/" element={<Navigate to="/movies" replace />} />
+                <Route path="/" element={<Navigate to="/home" replace />} />
+                <Route path="/home" element={<HomePage />} />
                 <Route path="/movies" element={<MoviesPage />} />
                 <Route path="/series" element={<SeriesPage />} />
                 <Route path="/dates" element={<DatesPage />} />
