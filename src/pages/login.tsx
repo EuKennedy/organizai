@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { clearAuthStorage } from "@/lib/auth-storage";
 import { DiagnosticsDialog } from "@/components/diagnostics-dialog";
+import { InstallPrompt } from "@/components/install-prompt";
 import { cn } from "@/lib/utils";
 
 export function LoginPage() {
@@ -137,6 +138,8 @@ export function LoginPage() {
             Limpar dados locais
           </button>
         </div>
+
+        <InstallPrompt />
 
         <DiagnosticsDialog open={diagOpen} onClose={() => setDiagOpen(false)} />
       </motion.div>
