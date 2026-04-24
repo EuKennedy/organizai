@@ -19,6 +19,7 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
+import { InstallButton } from "@/components/install-prompt";
 
 const NAV_ITEMS = [
   { to: "/home", label: "Início", icon: Home },
@@ -160,6 +161,7 @@ export function Sidebar() {
 
         {/* Footer */}
         <div className="space-y-0.5 border-t border-sidebar-border/60 p-3">
+          <InstallButton className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-sidebar-accent/60" />
           <button
             onClick={toggleTheme}
             className="hidden w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground lg:flex"
