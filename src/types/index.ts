@@ -356,6 +356,8 @@ export interface Couple {
   name: string;
   start_date: string | null;
   logo_url: string | null;
+  /** OKLCH hue (0-359). Null = coral (default). */
+  accent_hue: number | null;
   created_at: string;
   updated_at: string;
 }

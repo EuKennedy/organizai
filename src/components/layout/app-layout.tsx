@@ -2,10 +2,12 @@ import type { ReactNode } from "react";
 import { Sidebar } from "./sidebar";
 import { CoupleProvider } from "@/hooks/use-couple";
 import { UpdatePrompt } from "@/components/update-prompt";
+import { ThemeApplier } from "@/components/theme-applier";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <CoupleProvider>
+      <ThemeApplier />
       <div className="flex h-dvh overflow-hidden bg-background text-foreground">
         <Sidebar />
         <main className="flex-1 overflow-y-auto overflow-x-hidden">

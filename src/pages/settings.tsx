@@ -9,6 +9,8 @@ import {
   ImagePlus,
   Trash2,
   Loader2,
+  Palette,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -65,6 +67,7 @@ export function SettingsPage() {
       />
 
       <LogoSection />
+      <AccentColorSection />
 
       {/* Couple details */}
       <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
@@ -126,6 +129,122 @@ export function SettingsPage() {
       <NotificationsSection />
       <AppVersionSection />
     </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Accent color picker                                                        */
+/* -------------------------------------------------------------------------- */
+
+interface AccentSwatch {
+  name: string;
+  hue: number; // OKLCH hue
+}
+
+const ACCENT_SWATCHES: AccentSwatch[] = [
+  { name: "Coral", hue: 22 },
+  { name: "Pêssego", hue: 45 },
+  { name: "Âmbar", hue: 70 },
+  { name: "Esmeralda", hue: 160 },
+  { name: "Ciano", hue: 200 },
+  { name: "Azul", hue: 240 },
+  { name: "Violeta", hue: 270 },
+  { name: "Lavanda", hue: 300 },
+  { name: "Magenta", hue: 320 },
+  { name: "Rosé", hue: 350 },
+];
+
+function AccentColorSection() {
+  const { couple, updateCouple } = useCouple();
+  const [pending, setPending] = useState<number | null | "default">(null);
+
+  const currentHue = couple?.accent_hue ?? null;
+
+  const handlePick = async (hue: number | null) => {
+    if (!couple) return;
+    setPending(hue ?? "default");
+    try {
+      await updateCouple({ accent_hue: hue });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar cor");
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <Palette className="h-3.5 w-3.5 text-primary" />
+        <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Cor de destaque
+        </h3>
+      </div>
+
+      <p className="mb-4 text-[13px] text-muted-foreground">
+        Vai pintar botões, links, ícones ativos e a barra lateral. Aparece nos
+        dois celulares.
+      </p>
+
+      <div className="grid grid-cols-5 gap-3 sm:grid-cols-10">
+        {ACCENT_SWATCHES.map((s) => {
+          const active = currentHue === s.hue;
+          const isLoading = pending === s.hue;
+          return (
+            <button
+              key={s.hue}
+              type="button"
+              onClick={() => handlePick(s.hue)}
+              disabled={pending !== null}
+              aria-label={`${s.name}${active ? " (atual)" : ""}`}
+              title={s.name}
+              className={cn(
+                "relative aspect-square w-full rounded-full transition-all",
+                "ring-2 ring-offset-2 ring-offset-card",
+                active
+                  ? "ring-foreground scale-105 shadow-lg"
+                  : "ring-transparent hover:ring-foreground/30 hover:scale-105",
+                pending !== null && !isLoading && "opacity-40"
+              )}
+              style={{
+                backgroundColor: `oklch(0.78 0.155 ${s.hue})`,
+              }}
+            >
+              {active && (
+                <Check
+                  className="absolute inset-0 m-auto h-4 w-4 text-white drop-shadow"
+                  strokeWidth={3}
+                />
+              )}
+              {isLoading && (
+                <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-white" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {currentHue !== null && (
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-border/60 bg-background/40 p-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Atual
+            </p>
+            <p className="mt-0.5 text-sm font-semibold tracking-tight">
+              {ACCENT_SWATCHES.find((s) => s.hue === currentHue)?.name ?? "Personalizada"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handlePick(null)}
+            disabled={pending !== null}
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground disabled:opacity-50"
+          >
+            {pending === "default" ? "Voltando…" : "Voltar pro padrão"}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 
