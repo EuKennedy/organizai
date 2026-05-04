@@ -355,6 +355,7 @@ export interface Couple {
   id: string;
   name: string;
   start_date: string | null;
+  logo_url: string | null;
   created_at: string;
   updated_at: string;
 }

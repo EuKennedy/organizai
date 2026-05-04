@@ -1,5 +1,15 @@
-import { useState } from "react";
-import { Heart, RefreshCw, Smartphone, Bell, BellOff, Share } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  Heart,
+  RefreshCw,
+  Smartphone,
+  Bell,
+  BellOff,
+  Share,
+  ImagePlus,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useCouple } from "@/hooks/use-couple";
@@ -9,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { btnPrimary } from "@/lib/ui";
 import { cn } from "@/lib/utils";
+import { uploadCoupleLogo, deleteCoupleLogo } from "@/lib/logo-upload";
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -52,6 +63,8 @@ export function SettingsPage() {
         subtitle="Detalhes do app e da nossa história."
         ambient="rose"
       />
+
+      <LogoSection />
 
       {/* Couple details */}
       <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
@@ -113,6 +126,132 @@ export function SettingsPage() {
       <NotificationsSection />
       <AppVersionSection />
     </>
+  );
+}
+
+function LogoSection() {
+  const { couple, updateCouple } = useCouple();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handlePick = () => inputRef.current?.click();
+
+  const handleFile = async (file: File) => {
+    if (!couple) return;
+    setUploading(true);
+    try {
+      const previous = couple.logo_url;
+      const url = await uploadCoupleLogo(file, couple.id);
+      await updateCouple({ logo_url: url });
+      // Best-effort cleanup of the previous logo
+      if (previous) deleteCoupleLogo(previous).catch(() => void 0);
+      toast.success("Logo atualizada");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro no upload");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!couple || !couple.logo_url) return;
+    setUploading(true);
+    try {
+      const previous = couple.logo_url;
+      await updateCouple({ logo_url: null });
+      if (previous) deleteCoupleLogo(previous).catch(() => void 0);
+      toast.success("Voltamos pra logo padrão");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <ImagePlus className="h-3.5 w-3.5 text-primary" />
+        <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Logo do casal
+        </h3>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative">
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-primary/20">
+            {couple?.logo_url ? (
+              <img
+                src={couple.logo_url}
+                alt="Logo do casal"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <Heart
+                className="h-9 w-9 text-primary"
+                fill="currentColor"
+                strokeWidth={0}
+              />
+            )}
+          </div>
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60 backdrop-blur-sm">
+              <Loader2 className="h-5 w-5 animate-spin text-white" />
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold tracking-tight">
+            {couple?.logo_url ? "Logo personalizada" : "Coração padrão"}
+          </p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            Aparece no app, no login e nas notificações que vocês recebem.
+          </p>
+        </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+            e.target.value = "";
+          }}
+        />
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handlePick}
+            disabled={uploading}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/50 px-4 py-2 text-xs font-semibold transition-all hover:border-primary/40 hover:bg-primary/[0.04] disabled:opacity-50"
+          >
+            <ImagePlus className="h-3 w-3" />
+            {couple?.logo_url ? "Trocar" : "Enviar"}
+          </button>
+          {couple?.logo_url && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={uploading}
+              aria-label="Remover logo"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-muted/40 text-muted-foreground transition-all hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/80">
+        ⚠️ O ícone na <span className="font-semibold">tela de início do iPhone</span>{" "}
+        é fixo (limitação do iOS) — só atualiza se vocês reinstalarem o atalho.
+        O resto (login, sidebar, home, notificações) muda na hora.
+      </p>
+    </section>
   );
 }
 

@@ -28,7 +28,7 @@ interface CoupleContextValue {
     updates: Partial<Pick<CoupleMember, "display_name" | "avatar_color">>
   ) => Promise<void>;
   /** Update couple name / start_date. */
-  updateCouple: (updates: Partial<Pick<Couple, "name" | "start_date">>) => Promise<void>;
+  updateCouple: (updates: Partial<Pick<Couple, "name" | "start_date" | "logo_url">>) => Promise<void>;
 }
 
 const CoupleContext = createContext<CoupleContextValue | null>(null);
@@ -146,7 +146,7 @@ export function CoupleProvider({ children }: { children: ReactNode }) {
   );
 
   const updateCouple = useCallback(
-    async (updates: Partial<Pick<Couple, "name" | "start_date">>) => {
+    async (updates: Partial<Pick<Couple, "name" | "start_date" | "logo_url">>) => {
       if (!couple) return;
       const { error } = await supabase
         .from("couples")
@@ -178,6 +178,15 @@ export function useCouple() {
   const ctx = useContext(CoupleContext);
   if (!ctx) throw new Error("useCouple must be used within CoupleProvider");
   return ctx;
+}
+
+/**
+ * Like useCouple but returns null instead of throwing when used outside the
+ * provider (e.g. login page). Useful for components shared across logged-in
+ * and logged-out trees.
+ */
+export function useOptionalCouple(): CoupleContextValue | null {
+  return useContext(CoupleContext);
 }
 
 /** Convenience: read just the couple_id (or null while loading / no couple). */

@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { InstallButton } from "@/components/install-prompt";
+import { CoupleLogo } from "@/components/couple-logo";
 
 const NAV_ITEMS = [
   { to: "/home", label: "Início", icon: Home },
@@ -119,10 +120,7 @@ export function Sidebar() {
       >
         {/* Logo */}
         <div className="flex h-16 items-center gap-2.5 px-5 pt-[env(safe-area-inset-top)]">
-          <div className="relative">
-            <div className="absolute inset-0 -z-10 scale-150 rounded-full bg-primary/40 blur-lg" />
-            <Heart className="h-5 w-5 text-primary" fill="currentColor" />
-          </div>
+          <CoupleLogo size="sm" glow rounded="full" />
           <span className="text-[15px] font-semibold tracking-tight text-sidebar-foreground">
             OrganizAI
           </span>
