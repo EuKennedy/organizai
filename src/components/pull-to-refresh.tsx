@@ -20,17 +20,33 @@ interface PullToRefreshProps {
   children: ReactNode;
 }
 
+/** Walk up the DOM finding the closest ancestor that actually scrolls vertically. */
+function findScrollParent(el: Element | null): HTMLElement | null {
+  let cur: Element | null = el;
+  while (cur && cur !== document.body && cur !== document.documentElement) {
+    const node = cur as HTMLElement;
+    const style = window.getComputedStyle(node);
+    const overflowY = style.overflowY;
+    const canScroll =
+      (overflowY === "auto" || overflowY === "scroll") &&
+      node.scrollHeight > node.clientHeight + 1;
+    if (canScroll) return node;
+    cur = cur.parentElement;
+  }
+  return document.scrollingElement as HTMLElement | null;
+}
+
 /**
  * Native-feeling pull-to-refresh for mobile (iOS / Android PWA).
  *
- * Logic:
- *  - Only activates when the scroll container is at the very top (scrollY = 0)
- *  - Tracks finger Y delta on touchmove
- *  - Releasing past `threshold` triggers `onRefresh`
- *  - Indicator (refresh icon) sits behind the content and reveals as user pulls
- *
- * Doesn't interfere with vertical scroll past the top — once finger passes
- * touchstart Y by 8px and we're at scrollY=0, we own the gesture.
+ * Correctness rules:
+ *  - On touchstart, we find the closest scrolling ancestor and require
+ *    its scrollTop === 0 to even consider taking over the gesture.
+ *  - We commit to "pull" only if the FIRST move is downward AND the
+ *    ancestor is still at the top.
+ *  - If the user is anywhere mid-scroll, we stay completely passive
+ *    (won't preventDefault, won't move the indicator).
+ *  - Threshold-based release fires onRefresh; otherwise spring back.
  */
 export function PullToRefresh({
   onRefresh,
@@ -39,52 +55,76 @@ export function PullToRefresh({
   children,
 }: PullToRefreshProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollParentRef = useRef<HTMLElement | null>(null);
   const startY = useRef<number | null>(null);
   const lockedAsPull = useRef(false);
+  // We freeze "we started at the top" once at touchstart — defends against
+  // edge cases where scrollTop changes mid-gesture from inertia.
+  const startedAtTop = useRef(false);
   const [pullDelta, setPullDelta] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const onTouchStart = (e: RTouchEvent) => {
-    // Only consider single-finger gestures
-    if (e.touches.length !== 1) return;
-    // Find scroll parent — fallback to window
-    const scrollY = window.scrollY || document.documentElement.scrollTop;
-    if (scrollY > 4) return; // not at top, normal scroll
+    if (e.touches.length !== 1 || refreshing) return;
+    const sp = findScrollParent(containerRef.current);
+    scrollParentRef.current = sp;
+    startedAtTop.current = !!sp && sp.scrollTop <= 0;
+    if (!startedAtTop.current) return;
     startY.current = e.touches[0]!.clientY;
     lockedAsPull.current = false;
   };
 
   const onTouchMove = (e: RTouchEvent) => {
-    if (startY.current === null || refreshing) return;
-    const dy = e.touches[0]!.clientY - startY.current;
-    if (dy <= 0) {
-      // Reset if user swipes up — release the gesture
+    if (
+      startY.current === null ||
+      refreshing ||
+      !startedAtTop.current
+    )
+      return;
+
+    // If the user has scrolled DOWN inside the parent (scrollTop became >0)
+    // since touchstart, abort: this is a normal scroll.
+    const sp = scrollParentRef.current;
+    if (sp && sp.scrollTop > 0) {
       setPullDelta(0);
+      lockedAsPull.current = false;
       return;
     }
-    // We commit to pull-to-refresh once they cross 8px
+
+    const dy = e.touches[0]!.clientY - startY.current;
+    if (dy <= 0) {
+      // Finger going up — let the page scroll normally
+      setPullDelta(0);
+      lockedAsPull.current = false;
+      return;
+    }
+    // Commit only when finger crosses 8px DOWN while parent is at top
     if (dy > 8) lockedAsPull.current = true;
     if (!lockedAsPull.current) return;
-    // Resistance curve — slows the pull as they go further
+
+    // Resistance curve
     const eased = dy < maxPull ? dy : maxPull + (dy - maxPull) * 0.3;
     setPullDelta(eased);
-    // Prevent native overscroll bounce on iOS while pulling
     if (e.cancelable) e.preventDefault();
   };
 
   const onTouchEnd = async () => {
-    if (startY.current === null) return;
+    if (startY.current === null) {
+      setPullDelta(0);
+      return;
+    }
     const dy = pullDelta;
     startY.current = null;
+    const wasLocked = lockedAsPull.current;
     lockedAsPull.current = false;
+    startedAtTop.current = false;
     if (refreshing) return;
-    if (dy >= threshold) {
+    if (wasLocked && dy >= threshold) {
       setRefreshing(true);
-      setPullDelta(56); // Snap to a stable refresh state
+      setPullDelta(56);
       try {
         await onRefresh();
       } finally {
-        // Settle back
         setRefreshing(false);
         setPullDelta(0);
       }
@@ -93,7 +133,7 @@ export function PullToRefresh({
     }
   };
 
-  // Desktop guard — disable entirely on mouse-driven scroll
+  // Desktop guard
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
     setIsTouchDevice("ontouchstart" in window);
@@ -115,7 +155,6 @@ export function PullToRefresh({
       onTouchCancel={onTouchEnd}
       className="relative"
     >
-      {/* Indicator — fixed position so it overlays content */}
       <motion.div
         animate={{
           y: pullDelta - 32,
@@ -152,7 +191,6 @@ export function PullToRefresh({
         </div>
       </motion.div>
 
-      {/* Content shifts down as user pulls (subtle) */}
       <motion.div
         animate={{ y: pullDelta * 0.5 }}
         transition={

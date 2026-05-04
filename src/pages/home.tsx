@@ -163,7 +163,7 @@ export function HomePage() {
       {/* ACTIVITY FEED — TIMELINE EDITORIAL */}
       <section className="mt-10 sm:mt-12">
         <ActivityFeedHeader title="Nossa linha do tempo" />
-        <ActivityFeed limit={20} />
+        <ActivityFeed initial={5} max={30} />
       </section>
 
       {/* MOVIES SNAPSHOT */}
