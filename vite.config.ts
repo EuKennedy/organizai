@@ -10,6 +10,12 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "prompt",
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+      },
       includeAssets: [
         "favicon.svg",
         "favicon-32.png",
@@ -55,57 +61,6 @@ export default defineConfig({
             sizes: "180x180",
             type: "image/png",
             purpose: "any",
-          },
-        ],
-      },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        // Never precache the Cloudflare Worker / Supabase responses —
-        // we always want fresh auth calls. Only cache app shell + assets.
-        navigateFallback: "/organizai/index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/rest\//],
-        cleanupOutdatedCaches: true,
-        runtimeCaching: [
-          {
-            // TMDB posters — cache-first, fine to serve stale.
-            urlPattern: /^https:\/\/image\.tmdb\.org\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "tmdb-images",
-              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Supabase Storage public photos — cache-first too.
-            urlPattern:
-              /^https:\/\/[^/]*\.supabase\.co\/storage\/v1\/object\/public\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "storage-photos",
-              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Google Fonts (Fraunces) — cache-first with long TTL.
-            urlPattern: /^https:\/\/fonts\.(gstatic|googleapis)\.com\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts",
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Inter variable font on rsms.me.
-            urlPattern: /^https:\/\/rsms\.me\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "inter-font",
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
           },
         ],
       },

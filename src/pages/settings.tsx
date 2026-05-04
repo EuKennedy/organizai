@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Heart, RefreshCw, Smartphone } from "lucide-react";
+import { Heart, RefreshCw, Smartphone, Bell, BellOff, Share } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useCouple } from "@/hooks/use-couple";
+import { usePush } from "@/hooks/use-push";
 import { PageHero } from "@/components/page-hero";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { btnPrimary } from "@/lib/ui";
+import { cn } from "@/lib/utils";
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -108,8 +110,140 @@ export function SettingsPage() {
         </div>
       </section>
 
+      <NotificationsSection />
       <AppVersionSection />
     </>
+  );
+}
+
+function NotificationsSection() {
+  const {
+    supported,
+    needsIOSInstall,
+    permission,
+    isSubscribed,
+    loading,
+    enable,
+    disable,
+  } = usePush();
+  const [busy, setBusy] = useState(false);
+
+  const handleToggle = async () => {
+    setBusy(true);
+    try {
+      if (isSubscribed) {
+        await disable();
+        toast.success("Notificações desativadas");
+      } else {
+        await enable();
+        toast.success("Notificações ligadas");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao alternar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Estados especiais
+  if (!supported) {
+    return (
+      <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
+        <div className="mb-3 flex items-center gap-2">
+          <BellOff className="h-3.5 w-3.5 text-muted-foreground" />
+          <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Notificações
+          </h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Este navegador não suporta notificações push.
+        </p>
+      </section>
+    );
+  }
+
+  if (needsIOSInstall) {
+    return (
+      <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
+        <div className="mb-3 flex items-center gap-2">
+          <Bell className="h-3.5 w-3.5 text-primary" />
+          <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Notificações
+          </h3>
+        </div>
+        <p className="text-sm font-medium text-foreground">
+          Instale o app primeiro
+        </p>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          No iPhone, notificações só funcionam quando o OrganizAI tá instalado
+          na tela de início.
+        </p>
+        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-border/60 bg-background/40 p-3 text-[12px] text-muted-foreground">
+          <Share className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={2.25} />
+          <p>
+            No Safari, toque no botão de <span className="font-semibold text-foreground">Compartilhar</span> →{" "}
+            <span className="font-semibold text-foreground">Adicionar à Tela de Início</span>.
+            Depois abra o app pelo ícone e volte aqui.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const blocked = permission === "denied";
+
+  return (
+    <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <Bell className="h-3.5 w-3.5 text-primary" />
+        <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Notificações
+        </h3>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold tracking-tight">
+            Avisar quando ela adicionar algo
+          </p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            {blocked
+              ? "Permissão bloqueada. Habilite nas configurações do navegador."
+              : isSubscribed
+              ? "Você vai receber um toque pra cada novo filme, mimo, foto, cartinha…"
+              : "Toque pra autorizar e nunca mais perder o que ela posta"}
+          </p>
+        </div>
+
+        <button
+          onClick={handleToggle}
+          disabled={busy || loading || blocked}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all disabled:opacity-50",
+            isSubscribed
+              ? "border border-border bg-background/50 text-foreground hover:bg-background"
+              : "bg-primary text-primary-foreground hover:opacity-90"
+          )}
+        >
+          {busy || loading ? (
+            <>
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              Processando…
+            </>
+          ) : isSubscribed ? (
+            <>
+              <BellOff className="h-3 w-3" />
+              Desativar
+            </>
+          ) : (
+            <>
+              <Bell className="h-3 w-3" />
+              Ativar
+            </>
+          )}
+        </button>
+      </div>
+    </section>
   );
 }
 
