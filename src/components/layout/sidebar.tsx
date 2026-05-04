@@ -27,16 +27,16 @@ import { CoupleLogo } from "@/components/couple-logo";
 
 const NAV_ITEMS = [
   { to: "/home", label: "Início", icon: Home },
+  { to: "/dates", label: "Dates", icon: Heart },
+  { to: "/gallery", label: "Galeria", icon: Images },
   { to: "/movies", label: "Filmes", icon: Film },
   { to: "/series", label: "Séries", icon: Tv },
-  { to: "/dates", label: "Dates", icon: Heart },
-  { to: "/mimos", label: "Mimos", icon: Sparkles },
-  { to: "/wishlist", label: "Lista", icon: ShoppingBag },
-  { to: "/baby-names", label: "Nomes", icon: Baby },
-  { to: "/gallery", label: "Galeria", icon: Images },
   { to: "/letters", label: "Textos", icon: Mail },
-  { to: "/expenses", label: "Despesas", icon: Receipt },
   { to: "/goals", label: "Metas", icon: Target },
+  { to: "/wishlist", label: "Lista", icon: ShoppingBag },
+  { to: "/expenses", label: "Despesas", icon: Receipt },
+  { to: "/baby-names", label: "Nomes", icon: Baby },
+  { to: "/mimos", label: "Mimos", icon: Sparkles },
   { to: "/settings", label: "Ajustes", icon: Settings },
 ] as const;
 
