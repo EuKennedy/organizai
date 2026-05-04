@@ -81,9 +81,31 @@ async function trackInsertResponse(url: string, res: Response): Promise<void> {
   }
 }
 
+/** "iphone" | "android" | "desktop" — used by triggers to identify which
+ *  partner originated the change (when both share the same auth account). */
+function detectDeviceType(): "iphone" | "android" | "desktop" {
+  if (typeof navigator === "undefined") return "desktop";
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return "iphone";
+  if (/Android/.test(ua)) return "android";
+  return "desktop";
+}
+const DEVICE_TYPE = detectDeviceType();
+
 const customFetch: typeof fetch = async (input, init) => {
-  const res = await fetch(input, init);
   const url = typeof input === "string" ? input : (input as Request).url;
+
+  // Inject X-Device-Type header on every Supabase request so the trigger
+  // (server-side) can attribute changes to the correct device/partner.
+  if (url && url.startsWith(supabaseUrl)) {
+    const headers = new Headers(init?.headers);
+    if (!headers.has("X-Device-Type")) {
+      headers.set("X-Device-Type", DEVICE_TYPE);
+    }
+    init = { ...init, headers };
+  }
+
+  const res = await fetch(input, init);
   const method = (init?.method ?? "GET").toUpperCase();
 
   // 401 → broken session

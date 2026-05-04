@@ -11,6 +11,7 @@ import {
   Loader2,
   Palette,
   Check,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -68,6 +69,7 @@ export function SettingsPage() {
 
       <LogoSection />
       <AccentColorSection />
+      <DeviceNamesSection />
 
       {/* Couple details */}
       <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
@@ -129,6 +131,92 @@ export function SettingsPage() {
       <NotificationsSection />
       <AppVersionSection />
     </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Device names — quem usa iPhone vs Android                                  */
+/* -------------------------------------------------------------------------- */
+
+function DeviceNamesSection() {
+  const { couple, updateCouple } = useCouple();
+  const [iphoneName, setIphoneName] = useState(couple?.iphone_partner_name ?? "");
+  const [androidName, setAndroidName] = useState(couple?.android_partner_name ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateCouple({
+        iphone_partner_name: iphoneName.trim() || null,
+        android_partner_name: androidName.trim() || null,
+      });
+      toast.success("Salvo");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const dirty =
+    iphoneName.trim() !== (couple?.iphone_partner_name ?? "") ||
+    androidName.trim() !== (couple?.android_partner_name ?? "");
+
+  return (
+    <section className="mb-6 rounded-3xl border border-border bg-card p-5 sm:p-6">
+      <div className="mb-3 flex items-center gap-2">
+        <Users className="h-3.5 w-3.5 text-primary" />
+        <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Quem usa cada celular
+        </h3>
+      </div>
+
+      <p className="mb-4 text-[13px] text-muted-foreground">
+        Quando alguém adiciona algo, a notificação chega no outro com o nome
+        certo: <span className="font-semibold text-foreground">"Júlia adicionou um filme"</span> em vez de
+        algo genérico.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>📱</span>
+            iPhone
+          </Label>
+          <Input
+            placeholder="Ex: Kennedy"
+            value={iphoneName}
+            onChange={(e) => setIphoneName(e.target.value)}
+            className="h-10"
+            maxLength={32}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>🤖</span>
+            Android
+          </Label>
+          <Input
+            placeholder="Ex: Júlia"
+            value={androidName}
+            onChange={(e) => setAndroidName(e.target.value)}
+            className="h-10"
+            maxLength={32}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className={btnPrimary}
+        >
+          {saving ? "Salvando…" : "Salvar nomes"}
+        </button>
+      </div>
+    </section>
   );
 }
 

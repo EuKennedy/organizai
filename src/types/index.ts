@@ -358,6 +358,10 @@ export interface Couple {
   logo_url: string | null;
   /** OKLCH hue (0-359). Null = coral (default). */
   accent_hue: number | null;
+  /** Nome da pessoa que usa o iPhone — usado em push notifications. */
+  iphone_partner_name: string | null;
+  /** Nome da pessoa que usa o Android — usado em push notifications. */
+  android_partner_name: string | null;
   created_at: string;
   updated_at: string;
 }

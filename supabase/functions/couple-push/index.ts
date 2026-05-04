@@ -1,17 +1,20 @@
 // Edge Function: couple-push
 //
-// Recebe payloads de triggers Postgres (table + record) e dispara Web Push
-// pra todos os dispositivos do casal — exceto pro autor da inserção.
+// Recebe payloads de triggers Postgres (table + record + old_record + event +
+// device_type) e dispara Web Push pra todos os dispositivos do casal.
+// A dedup de "não notificar quem fez" é feita no SW de cada device via IDB
+// (push é entregue pra todos, SW filtra antes de mostrar).
+//
+// Mensagens são contextuais e carinhosas — variam por tabela, evento (insert
+// vs status change) e quem originou (iPhone vs Android, configurável em
+// couples.iphone_partner_name / android_partner_name).
 //
 // Required env (Edge Function secrets):
-//   - VAPID_PUBLIC_KEY
-//   - VAPID_PRIVATE_KEY
-//   - VAPID_SUBJECT (mailto:seu@email.com)
-//   - PUSH_WEBHOOK_SECRET (mesmo secret armazenado no vault da DB)
-//   - SUPABASE_URL (auto-injected)
-//   - SUPABASE_SERVICE_ROLE_KEY (auto-injected)
+//   - VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
+//   - PUSH_WEBHOOK_SECRET (mesmo secret no Vault da DB)
+//   - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto-injected)
 
-// @ts-expect-error — Deno std import map
+// @ts-expect-error — Deno std/npm imports
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // @ts-expect-error — npm: specifier
 import webpush from "npm:web-push@3.6.7";
@@ -38,8 +41,17 @@ interface PushPayload {
   icon?: string;
 }
 
+type DeviceType = "iphone" | "android" | "desktop" | null;
+
+interface CoupleRow {
+  id: string;
+  iphone_partner_name: string | null;
+  android_partner_name: string | null;
+  logo_url: string | null;
+}
+
 // -----------------------------------------------------------------------------
-// Mensagem por tipo de tabela
+// Helpers
 // -----------------------------------------------------------------------------
 function brl(v: unknown): string {
   const n = Number(v);
@@ -51,123 +63,383 @@ function brl(v: unknown): string {
   }).format(n);
 }
 
-function buildPayload(
-  table: string,
-  record: Record<string, unknown>,
-  authorName: string
-): PushPayload | null {
-  const author = authorName || "Seu amor";
-  const safe = (s: unknown): string => (typeof s === "string" ? s : "");
+function safe(s: unknown): string {
+  return typeof s === "string" ? s : "";
+}
+
+function fmtDateBR(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Resolve qual nome usar baseado no device de origem. Fallback: display_name
+ * do member, ou "Seu amor" se nada estiver setado.
+ */
+function resolveAuthorName(
+  device: DeviceType,
+  couple: CoupleRow | null,
+  fallback: string
+): string {
+  if (device === "iphone" && couple?.iphone_partner_name) {
+    return couple.iphone_partner_name;
+  }
+  if (device === "android" && couple?.android_partner_name) {
+    return couple.android_partner_name;
+  }
+  return fallback || "Seu amor";
+}
+
+// -----------------------------------------------------------------------------
+// Mensagens por tabela — INSERT e UPDATE
+// -----------------------------------------------------------------------------
+
+interface BuildArgs {
+  table: string;
+  event: "INSERT" | "UPDATE" | string;
+  record: Record<string, unknown>;
+  oldRecord: Record<string, unknown> | null;
+  author: string;
+}
+
+function buildPayload(args: BuildArgs): PushPayload | null {
+  const { table, event, record, oldRecord, author } = args;
+  const isUpdate = event === "UPDATE";
 
   switch (table) {
     case "movies":
-      return {
-        title: `🎬 ${author} adicionou um filme`,
-        body: safe(record.title) || "Novo filme",
-        url: "/movies",
-        tag: `movies-${record.id}`,
-      };
+      return moviePayload(record, oldRecord, author, isUpdate);
     case "series":
-      return {
-        title: `📺 ${author} adicionou uma série`,
-        body: safe(record.title) || "Nova série",
-        url: "/series",
-        tag: `series-${record.id}`,
-      };
+      return seriesPayload(record, oldRecord, author, isUpdate);
     case "date_ideas":
-      return {
-        title: `💕 ${author} adicionou um date`,
-        body: safe(record.name) || "Novo date",
-        url: "/dates",
-        tag: `dates-${record.id}`,
-      };
+      return datePayload(record, oldRecord, author, isUpdate);
     case "mimos":
-      return {
-        title: `✨ ${author} adicionou um mimo`,
-        body:
-          [safe(record.brand), safe(record.name)].filter(Boolean).join(" · ") ||
-          "Novo mimo",
-        url: "/mimos",
-        tag: `mimos-${record.id}`,
-      };
+      return mimoPayload(record, oldRecord, author, isUpdate);
     case "wishlist_items":
-      return {
-        title: `🛒 ${author} quer comprar`,
-        body:
-          [safe(record.brand), safe(record.name)].filter(Boolean).join(" · ") ||
-          "Novo item na lista",
-        url: "/wishlist",
-        tag: `wishlist-${record.id}`,
-      };
+      return wishlistPayload(record, oldRecord, author, isUpdate);
     case "baby_names":
-      return {
-        title: `👶 ${author} pensou em um nome`,
-        body: safe(record.name) || "Novo nome",
-        url: "/baby-names",
-        tag: `babynames-${record.id}`,
-      };
+      return babyNamePayload(record, oldRecord, author, isUpdate);
     case "gallery_albums":
-      return {
-        title: `📸 ${author} criou um álbum`,
-        body: safe(record.name) || "Novo álbum",
-        url: "/gallery",
-        tag: `albums-${record.id}`,
-      };
+      return albumPayload(record, author);
     case "gallery_photos":
-      return {
-        title: `📸 ${author} adicionou uma foto`,
-        body: "Toque pra ver",
-        url: `/gallery/${safe(record.album_id)}`,
-        tag: `photo-${record.id}`,
-      };
+      return photoPayload(record, author);
     case "letters":
-      return {
-        title: `💌 ${author} escreveu uma cartinha`,
-        body: safe(record.title) || "Nova cartinha",
-        url: "/letters",
-        tag: `letters-${record.id}`,
-      };
-    case "transactions": {
-      const amount = brl(record.amount);
-      const cat = safe(record.category);
-      return {
-        title:
-          record.type === "income"
-            ? `💰 ${author} registrou uma entrada`
-            : `💸 ${author} registrou uma despesa`,
-        body: [amount, cat].filter(Boolean).join(" · ") || "Nova transação",
-        url: "/expenses",
-        tag: `tx-${record.id}`,
-      };
-    }
+      return letterPayload(record, author);
+    case "transactions":
+      return transactionPayload(record, author);
     case "financial_goals":
-      return {
-        title: `🎯 ${author} criou uma meta`,
-        body: safe(record.name) || "Nova meta",
-        url: "/goals",
-        tag: `goals-${record.id}`,
-      };
+      return goalPayload(record, author);
     case "goal_deposits":
-      return {
-        title: `🎯 ${author} guardou pra meta`,
-        body: brl(record.amount) || "Novo depósito",
-        url: "/goals",
-        tag: `dep-${record.id}`,
-      };
+      return depositPayload(record, author);
+    // Categorias custom: ruído, não notifica
     case "mimo_categories":
     case "wishlist_categories":
-      // Categorias custom — não notifica (ruído)
       return null;
     default:
       return null;
   }
 }
 
+// -- Movies -------------------------------------------------------------------
+function moviePayload(
+  r: Record<string, unknown>,
+  old: Record<string, unknown> | null,
+  author: string,
+  isUpdate: boolean
+): PushPayload {
+  const title = safe(r.title) || "um filme";
+  const status = safe(r.status);
+  const oldStatus = old ? safe(old.status) : null;
+
+  let head = "", body = "";
+  if (isUpdate && oldStatus && oldStatus !== status) {
+    if (status === "watching") {
+      head = `🍿 ${author} começou a assistir`;
+      body = `${title} — quer companhia?`;
+    } else if (status === "watched") {
+      head = `🎉 Vocês terminaram um filme!`;
+      body = `${title} 💖`;
+    } else if (status === "want_to_watch") {
+      head = `🎬 ${author} quer ver`;
+      body = title;
+    } else {
+      head = `🎬 ${author} mexeu no filme`;
+      body = title;
+    }
+  } else {
+    // INSERT
+    if (status === "watching") {
+      head = `🍿 ${author} já tá assistindo`;
+      body = title;
+    } else if (status === "watched") {
+      head = `✅ ${author} marcou um filme como visto`;
+      body = title;
+    } else {
+      head = `🎬 ${author} adicionou um filme pra vocês verem`;
+      body = title;
+    }
+  }
+  return { title: head, body, url: "/movies", tag: `movies-${r.id}` };
+}
+
+// -- Series -------------------------------------------------------------------
+function seriesPayload(
+  r: Record<string, unknown>,
+  old: Record<string, unknown> | null,
+  author: string,
+  isUpdate: boolean
+): PushPayload {
+  const title = safe(r.title) || "uma série";
+  const status = safe(r.status);
+  const oldStatus = old ? safe(old.status) : null;
+
+  let head = "", body = "";
+  if (isUpdate && oldStatus && oldStatus !== status) {
+    if (status === "watching") {
+      head = `📺 ${author} começou uma série`;
+      body = `${title} — bora ver junto?`;
+    } else if (status === "watched") {
+      head = `🎉 Vocês fecharam uma série!`;
+      body = title;
+    } else {
+      head = `📺 ${author} quer ver`;
+      body = title;
+    }
+  } else {
+    if (status === "watching") {
+      head = `📺 ${author} já tá vendo`;
+      body = title;
+    } else {
+      head = `📺 ${author} adicionou uma série`;
+      body = title;
+    }
+  }
+  return { title: head, body, url: "/series", tag: `series-${r.id}` };
+}
+
+// -- Date ideas ---------------------------------------------------------------
+function datePayload(
+  r: Record<string, unknown>,
+  old: Record<string, unknown> | null,
+  author: string,
+  isUpdate: boolean
+): PushPayload {
+  const name = safe(r.name) || "um date";
+  const status = safe(r.status);
+  const oldStatus = old ? safe(old.status) : null;
+  const dateTime = safe(r.date_time);
+  const when = dateTime ? fmtDateBR(dateTime) : "";
+
+  let head = "", body = "";
+  if (isUpdate && oldStatus && oldStatus !== status) {
+    if (status === "scheduled") {
+      head = `💕 ${author} marcou um date pra vocês`;
+      body = when ? `${name} · ${when}` : name;
+    } else if (status === "done") {
+      head = `🥂 Que date inesquecível!`;
+      body = name;
+    } else if (status === "idea") {
+      head = `💡 ${author} guardou uma ideia`;
+      body = name;
+    }
+  } else {
+    if (status === "scheduled") {
+      head = `💕 ${author} marcou um date`;
+      body = when ? `${name} · ${when}` : name;
+    } else if (status === "done") {
+      head = `🥂 ${author} registrou um date que já rolou`;
+      body = name;
+    } else {
+      head = `💡 ${author} teve uma ideia de date`;
+      body = name;
+    }
+  }
+  return { title: head, body, url: "/dates", tag: `dates-${r.id}` };
+}
+
+// -- Mimos --------------------------------------------------------------------
+function mimoPayload(
+  r: Record<string, unknown>,
+  old: Record<string, unknown> | null,
+  author: string,
+  isUpdate: boolean
+): PushPayload {
+  const name = safe(r.name) || "um mimo";
+  const brand = safe(r.brand);
+  const subject = brand ? `${brand} · ${name}` : name;
+  const owned = !!r.owned;
+  const finished = !!r.finished;
+  const oldOwned = old ? !!old.owned : null;
+  const oldFinished = old ? !!old.finished : null;
+
+  let head = "", body = "";
+  if (isUpdate) {
+    if (oldFinished === false && finished) {
+      head = `😢 Acabou o mimo`;
+      body = `${subject} — hora de repor?`;
+    } else if (oldOwned === false && owned) {
+      head = `✨ ${author} ganhou um mimo`;
+      body = subject;
+    } else {
+      head = `✨ ${author} mexeu no mimo`;
+      body = subject;
+    }
+  } else {
+    head = `✨ ${author} tá de olho num mimo`;
+    body = subject;
+  }
+  return { title: head, body, url: "/mimos", tag: `mimos-${r.id}` };
+}
+
+// -- Wishlist -----------------------------------------------------------------
+function wishlistPayload(
+  r: Record<string, unknown>,
+  old: Record<string, unknown> | null,
+  author: string,
+  isUpdate: boolean
+): PushPayload {
+  const name = safe(r.name) || "um item";
+  const brand = safe(r.brand);
+  const subject = brand ? `${brand} · ${name}` : name;
+  const status = safe(r.status);
+  const oldStatus = old ? safe(old.status) : null;
+  const price = brl(r.price);
+
+  let head = "", body = "";
+  if (isUpdate && oldStatus && oldStatus !== status) {
+    if (status === "comprado") {
+      head = `🛍️ Compraram!`;
+      body = price ? `${subject} · ${price}` : subject;
+    } else if (status === "desistido") {
+      head = `🤷 ${author} desistiu`;
+      body = subject;
+    } else {
+      head = `🛒 ${author} quer comprar`;
+      body = subject;
+    }
+  } else {
+    head = `🛒 ${author} quer isso`;
+    body = price ? `${subject} · ${price}` : subject;
+  }
+  return { title: head, body, url: "/wishlist", tag: `wishlist-${r.id}` };
+}
+
+// -- Baby names ---------------------------------------------------------------
+function babyNamePayload(
+  r: Record<string, unknown>,
+  old: Record<string, unknown> | null,
+  author: string,
+  isUpdate: boolean
+): PushPayload {
+  const name = safe(r.name) || "um nome";
+  const fav = !!r.favorite;
+  const oldFav = old ? !!old.favorite : null;
+
+  let head = "", body = "";
+  if (isUpdate) {
+    if (oldFav === false && fav) {
+      head = `💖 ${author} ama esse nome`;
+      body = `${name} virou favorito 🥹`;
+    } else if (oldFav === true && !fav) {
+      head = `${author} mudou de ideia`;
+      body = `${name} saiu dos favoritos`;
+    } else {
+      head = `👶 ${author} mexeu num nome`;
+      body = name;
+    }
+  } else {
+    head = `👶 ${author} pensou num nome`;
+    body = `${name} ${fav ? "💖" : ""}`.trim();
+  }
+  return { title: head, body, url: "/baby-names", tag: `babynames-${r.id}` };
+}
+
+// -- Gallery ------------------------------------------------------------------
+function albumPayload(r: Record<string, unknown>, author: string): PushPayload {
+  const name = safe(r.name) || "um álbum";
+  return {
+    title: `📸 ${author} criou um álbum`,
+    body: name,
+    url: "/gallery",
+    tag: `albums-${r.id}`,
+  };
+}
+
+function photoPayload(r: Record<string, unknown>, author: string): PushPayload {
+  return {
+    title: `📸 ${author} subiu uma foto nova`,
+    body: "Toque pra ver a memória",
+    url: `/gallery/${safe(r.album_id)}`,
+    tag: `photo-${r.id}`,
+  };
+}
+
+// -- Letters ------------------------------------------------------------------
+function letterPayload(r: Record<string, unknown>, author: string): PushPayload {
+  const title = safe(r.title) || "uma cartinha";
+  return {
+    title: `💌 ${author} escreveu pra você`,
+    body: title,
+    url: "/letters",
+    tag: `letters-${r.id}`,
+  };
+}
+
+// -- Finance ------------------------------------------------------------------
+function transactionPayload(
+  r: Record<string, unknown>,
+  author: string
+): PushPayload {
+  const amount = brl(r.amount);
+  const cat = safe(r.category);
+  const isIncome = r.type === "income";
+  return {
+    title: isIncome
+      ? `💰 ${author} registrou uma entrada`
+      : `💸 ${author} registrou uma despesa`,
+    body: [amount, cat].filter(Boolean).join(" · ") || "Nova transação",
+    url: "/expenses",
+    tag: `tx-${r.id}`,
+  };
+}
+
+function goalPayload(r: Record<string, unknown>, author: string): PushPayload {
+  const name = safe(r.name) || "uma meta";
+  const target = brl(r.target_amount);
+  return {
+    title: `🎯 ${author} criou uma meta nova`,
+    body: target ? `${name} — meta: ${target}` : name,
+    url: "/goals",
+    tag: `goals-${r.id}`,
+  };
+}
+
+function depositPayload(
+  r: Record<string, unknown>,
+  author: string
+): PushPayload {
+  const amount = brl(r.amount);
+  return {
+    title: `💪 ${author} guardou pra meta`,
+    body: amount || "Novo depósito",
+    url: "/goals",
+    tag: `dep-${r.id}`,
+  };
+}
+
 // -----------------------------------------------------------------------------
 // HTTP handler
 // -----------------------------------------------------------------------------
 Deno.serve(async (req) => {
-  // CORS preflight (caso seja chamada via fetch do browser por engano)
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       headers: {
@@ -177,81 +449,91 @@ Deno.serve(async (req) => {
       },
     });
   }
-
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  // Auth check: shared secret no header
+  // Auth check
   const provided = req.headers.get("X-Webhook-Secret");
   if (!WEBHOOK_SECRET || provided !== WEBHOOK_SECRET) {
     return new Response("Forbidden", { status: 403 });
   }
 
-  let body: { table?: string; record?: Record<string, unknown> };
+  let body: {
+    table?: string;
+    record?: Record<string, unknown>;
+    old_record?: Record<string, unknown> | null;
+    event?: string;
+    device_type?: DeviceType;
+  };
   try {
     body = await req.json();
   } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const { table, record } = body;
+  const { table, record, old_record, event = "INSERT", device_type = null } = body;
   if (!table || !record) {
     return new Response("Missing table or record", { status: 400 });
   }
 
   const coupleId = record.couple_id as string | undefined;
   const createdBy = (record.created_by ?? record.user_id) as string | undefined;
-  if (!coupleId || !createdBy) {
+  if (!coupleId) {
     return new Response(
-      JSON.stringify({ skipped: "missing couple_id or created_by" }),
+      JSON.stringify({ skipped: "missing couple_id" }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  // Nome do autor (display_name do couple_members)
-  const { data: authorRow } = await admin
-    .from("couple_members")
-    .select("display_name")
-    .eq("user_id", createdBy)
-    .maybeSingle();
-  const authorName =
-    (authorRow?.display_name as string | undefined) || "Seu amor";
-
-  // Couple logo (if customized) — used as the notification icon
+  // Fetch couple (for device names + logo)
   const { data: coupleRow } = await admin
     .from("couples")
-    .select("logo_url")
+    .select("id, iphone_partner_name, android_partner_name, logo_url")
     .eq("id", coupleId)
     .maybeSingle();
-  const coupleLogo = (coupleRow?.logo_url as string | undefined) || null;
+  const couple = (coupleRow as CoupleRow | null) ?? null;
 
-  const built = buildPayload(table, record, authorName);
+  // Fallback display name from couple_members
+  let memberDisplayName = "";
+  if (createdBy) {
+    const { data: m } = await admin
+      .from("couple_members")
+      .select("display_name")
+      .eq("user_id", createdBy)
+      .maybeSingle();
+    memberDisplayName = (m?.display_name as string | undefined) || "";
+  }
+
+  const author = resolveAuthorName(device_type, couple, memberDisplayName);
+
+  const built = buildPayload({
+    table,
+    event,
+    record,
+    oldRecord: old_record ?? null,
+    author,
+  });
   if (!built) {
     return new Response(JSON.stringify({ skipped: "no payload" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   }
-  // Enrich with table + id so the SW can self-suppress (same-account dedup),
-  // and override icon with the couple's custom logo when set.
+
+  // Enrich with table + id (SW dedup) + couple logo (notification icon)
   const payload = {
     ...built,
     table,
     id: typeof record.id === "string" ? record.id : "",
-    icon: coupleLogo ?? built.icon,
+    icon: couple?.logo_url ?? built.icon,
   };
 
-  // Buscar TODOS os subs do casal exceto os do autor
+  // Send to ALL subs in the couple — SW does the dedup
   const { data: subs, error: subsErr } = await admin
     .from("push_subscriptions")
     .select("*")
     .eq("couple_id", coupleId);
-  // Note: NÃO filtramos por user_id != createdBy aqui. Quando o casal
-  // compartilha a mesma conta auth (mesmo user_id), esse filtro excluiria
-  // ambos os devices. A dedup "não notificar quem inseriu" é feita no SW
-  // de cada device via IndexedDB (src/lib/recent-inserts.ts), que checa
-  // o {table, id} antes de mostrar a notificação.
 
   if (subsErr) {
     return new Response(JSON.stringify({ error: subsErr.message }), {
@@ -269,7 +551,6 @@ Deno.serve(async (req) => {
   }
 
   const expiredIds: string[] = [];
-
   await Promise.allSettled(
     subs.map(async (s) => {
       const subscription = {
@@ -283,7 +564,6 @@ Deno.serve(async (req) => {
           { TTL: 60 * 60 * 24, urgency: "normal" }
         );
         stats.sent++;
-        // best-effort touch last_used_at
         admin
           .from("push_subscriptions")
           .update({ last_used_at: new Date().toISOString() })
@@ -291,7 +571,6 @@ Deno.serve(async (req) => {
           .then(() => void 0);
       } catch (err: unknown) {
         const e = err as { statusCode?: number; message?: string };
-        // 404/410: subscription expirou — limpar
         if (e?.statusCode === 404 || e?.statusCode === 410) {
           expiredIds.push(s.id);
           stats.gone++;
@@ -304,13 +583,10 @@ Deno.serve(async (req) => {
   );
 
   if (expiredIds.length > 0) {
-    await admin
-      .from("push_subscriptions")
-      .delete()
-      .in("id", expiredIds);
+    await admin.from("push_subscriptions").delete().in("id", expiredIds);
   }
 
-  return new Response(JSON.stringify(stats), {
+  return new Response(JSON.stringify({ ...stats, author, device_type }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
