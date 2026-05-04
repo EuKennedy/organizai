@@ -61,7 +61,9 @@ export function DatesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [statusFilter, setStatusFilter] = useState<DateIdea["status"] | null>(null);
+  const [monthFilter, setMonthFilter] = useState<string | null>(null); // YYYY-MM
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [assigningDate, setAssigningDate] = useState<DateIdea | null>(null);
 
   const stats = useMemo(() => {
     const scheduled = dates.filter((d) => d.status === "scheduled").length;
@@ -76,10 +78,50 @@ export function DatesPage() {
     [dates]
   );
 
-  const filteredList = useMemo(
-    () => (statusFilter ? dates.filter((d) => d.status === statusFilter) : dates),
-    [dates, statusFilter]
-  );
+  // Months that have any scheduled date — used in the list-view month filter
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of dates) {
+      if (d.date_time) {
+        set.add(format(new Date(d.date_time), "yyyy-MM"));
+      }
+    }
+    return Array.from(set).sort();
+  }, [dates]);
+
+  const filteredList = useMemo(() => {
+    let r = dates;
+    if (statusFilter) r = r.filter((d) => d.status === statusFilter);
+    if (monthFilter) {
+      r = r.filter(
+        (d) =>
+          d.date_time &&
+          format(new Date(d.date_time), "yyyy-MM") === monthFilter
+      );
+    }
+    // Sort by proximity:
+    //   1. Future dates first, ASCending (closest upcoming first)
+    //   2. Past dates after, DESCending (most recent past first)
+    //   3. Loose (no date_time) at the very end, by created_at desc
+    const now = Date.now();
+    return r.slice().sort((a, b) => {
+      const aHas = !!a.date_time;
+      const bHas = !!b.date_time;
+      if (!aHas && !bHas) {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      if (!aHas) return 1;
+      if (!bHas) return -1;
+      const aT = new Date(a.date_time as string).getTime();
+      const bT = new Date(b.date_time as string).getTime();
+      const aFuture = aT >= now;
+      const bFuture = bT >= now;
+      if (aFuture && !bFuture) return -1;
+      if (!aFuture && bFuture) return 1;
+      if (aFuture) return aT - bT;
+      return bT - aT;
+    });
+  }, [dates, statusFilter, monthFilter]);
 
   const handleCreate = async (params?: { name?: string; dateTime?: string | null }) => {
     const name = (params?.name ?? newName).trim();
@@ -239,6 +281,7 @@ export function DatesPage() {
                     onFieldUpdate={handleFieldUpdate}
                     onStatusChange={handleStatusChange}
                     onDelete={handleDelete}
+                    onAssignDate={(date) => setAssigningDate(date)}
                   />
                 ))}
               </div>
@@ -250,8 +293,16 @@ export function DatesPage() {
       {/* LIST VIEW */}
       {viewMode === "list" && dates.length > 0 && (
         <>
+          {/* Sort hint */}
+          <div className="mb-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <Calendar className="h-3 w-3" />
+            <span>
+              Ordenado pelo mais próximo · futuro primeiro · ideias soltas no fim
+            </span>
+          </div>
+
           {/* Status filters */}
-          <div className="mb-5 flex flex-wrap gap-1.5">
+          <div className="mb-3 flex flex-wrap gap-1.5">
             <button
               onClick={() => setStatusFilter(null)}
               className={cn(chip, !statusFilter ? chipActive : chipIdle)}
@@ -283,6 +334,41 @@ export function DatesPage() {
             })}
           </div>
 
+          {/* Month filter — only shown if there are scheduled dates */}
+          {availableMonths.length > 0 && (
+            <div className="scrollbar-hide mb-5 -mx-1 flex snap-x snap-mandatory gap-1.5 overflow-x-auto px-1 pb-1">
+              <button
+                onClick={() => setMonthFilter(null)}
+                className={cn(
+                  "snap-start shrink-0",
+                  chip,
+                  !monthFilter ? chipActive : chipIdle
+                )}
+              >
+                Todos os meses
+              </button>
+              {availableMonths.map((m) => {
+                const [y, mo] = m.split("-").map(Number);
+                const label = format(new Date(y!, (mo ?? 1) - 1, 1), "MMM yyyy", {
+                  locale: ptBR,
+                });
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setMonthFilter(m === monthFilter ? null : m)}
+                    className={cn(
+                      "snap-start shrink-0 capitalize",
+                      chip,
+                      monthFilter === m ? chipActive : chipIdle
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="mt-2 space-y-2">
             <AnimatePresence mode="popLayout">
               {filteredList.map((d) => (
@@ -294,6 +380,7 @@ export function DatesPage() {
                   onFieldUpdate={handleFieldUpdate}
                   onStatusChange={handleStatusChange}
                   onDelete={handleDelete}
+                  onAssignDate={(date) => setAssigningDate(date)}
                 />
               ))}
             </AnimatePresence>
@@ -313,13 +400,38 @@ export function DatesPage() {
           setSelectedDay(null);
           setViewMode("list");
           setExpandedId(d.id);
-          // Scroll to the row after the view switches
           setTimeout(() => {
             const el = document.getElementById(`date-${d.id}`);
             el?.scrollIntoView({ behavior: "smooth", block: "center" });
           }, 100);
         }}
         onDelete={handleDelete}
+        onAttachLoose={async (id, dateTime) => {
+          try {
+            await updateDate(id, { date_time: dateTime, status: "scheduled" });
+            toast.success("Anexado nesse dia");
+          } catch {
+            toast.error("Erro ao anexar");
+          }
+        }}
+      />
+
+      <AssignDateDialog
+        date={assigningDate}
+        onClose={() => setAssigningDate(null)}
+        onAssign={async (dateTime) => {
+          if (!assigningDate) return;
+          try {
+            await updateDate(assigningDate.id, {
+              date_time: dateTime,
+              status: dateTime ? "scheduled" : assigningDate.status,
+            });
+            toast.success(dateTime ? "Data marcada" : "Data removida");
+            setAssigningDate(null);
+          } catch {
+            toast.error("Erro");
+          }
+        }}
       />
 
       {/* Create dialog (top-level + button) */}
@@ -368,6 +480,7 @@ interface DateRowProps {
   onFieldUpdate: (id: string, field: keyof DateIdea, value: string | null) => void;
   onStatusChange: (id: string, status: DateIdea["status"]) => void;
   onDelete: (id: string) => void;
+  onAssignDate: (date: DateIdea) => void;
 }
 
 function DateRow({
@@ -377,6 +490,7 @@ function DateRow({
   onFieldUpdate,
   onStatusChange,
   onDelete,
+  onAssignDate,
 }: DateRowProps) {
   return (
     <motion.div
@@ -482,24 +596,25 @@ function DateRow({
                 </div>
                 <div className="space-y-1.5">
                   <FilterLabel>Data e horário</FilterLabel>
-                  <Input
-                    type="datetime-local"
-                    value={
-                      d.date_time
-                        ? new Date(d.date_time).toISOString().slice(0, 16)
-                        : ""
-                    }
-                    onChange={(e) =>
-                      onFieldUpdate(
-                        d.id,
-                        "date_time",
-                        e.target.value
-                          ? new Date(e.target.value).toISOString()
-                          : null
-                      )
-                    }
-                    className="h-9"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => onAssignDate(d)}
+                    className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm transition-colors hover:bg-muted/40"
+                  >
+                    <span
+                      className={cn(
+                        "tabular truncate",
+                        d.date_time ? "text-foreground" : "text-muted-foreground"
+                      )}
+                    >
+                      {d.date_time
+                        ? format(new Date(d.date_time), "dd MMM yyyy, HH:mm", {
+                            locale: ptBR,
+                          })
+                        : "Definir data e hora"}
+                    </span>
+                    <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  </button>
                 </div>
                 <div className="space-y-1.5">
                   <FilterLabel>Clima</FilterLabel>
@@ -553,5 +668,93 @@ function DateRow({
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* AssignDateDialog — picker dedicado pra anexar / mudar data + hora         */
+/* Sem race com o re-render do parent (input fica em state local até salvar)*/
+/* -------------------------------------------------------------------------- */
+
+interface AssignDateDialogProps {
+  date: DateIdea | null;
+  onClose: () => void;
+  onAssign: (dateTime: string | null) => Promise<void>;
+}
+
+function AssignDateDialog({ date, onClose, onAssign }: AssignDateDialogProps) {
+  const initial = date?.date_time
+    ? new Date(date.date_time).toISOString().slice(0, 16)
+    : "";
+  const [value, setValue] = useState(initial);
+  const [saving, setSaving] = useState(false);
+
+  // Reset internal value whenever a new date is opened
+  useMemo(() => {
+    setValue(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date?.id]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onAssign(value ? new Date(value).toISOString() : null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setSaving(true);
+    try {
+      await onAssign(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!date} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Marcar data e hora</DialogTitle>
+        </DialogHeader>
+        {date && (
+          <div className="space-y-4 pt-2">
+            <p className="rounded-xl border border-border bg-background/40 px-3 py-2 text-sm font-medium">
+              {date.name}
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Quando?</Label>
+              <Input
+                type="datetime-local"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                className="h-10 tabular"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              {date.date_time && (
+                <button
+                  onClick={handleRemove}
+                  disabled={saving}
+                  className="flex-1 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                >
+                  Tirar data
+                </button>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={!value || saving}
+                className={cn(btnPrimary, "flex-1")}
+              >
+                {saving ? "Salvando…" : "Salvar"}
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

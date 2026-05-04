@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Calendar, MapPin, Heart, Trash2 } from "lucide-react";
+import { X, Plus, Calendar, MapPin, Heart, Trash2, Sparkles, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,8 @@ interface DaySheetProps {
   onCreate: (params: { name: string; dateTime: string }) => Promise<void>;
   onSelect: (date: DateIdea) => void;
   onDelete: (id: string) => Promise<void>;
+  /** Attach an existing loose idea to the selected day at the given time. */
+  onAttachLoose: (id: string, dateTime: string) => Promise<void>;
 }
 
 export function DaySheet({
@@ -28,10 +30,13 @@ export function DaySheet({
   onCreate,
   onSelect,
   onDelete,
+  onAttachLoose,
 }: DaySheetProps) {
   const [name, setName] = useState("");
   const [time, setTime] = useState("19:00");
   const [creating, setCreating] = useState(false);
+  const [attaching, setAttaching] = useState<string | null>(null);
+  const [showLooseIdeas, setShowLooseIdeas] = useState(false);
 
   const isOpen = !!day;
   const dayDates = day
@@ -42,6 +47,11 @@ export function DaySheet({
             format(day, "yyyy-MM-dd")
       )
     : [];
+
+  const looseIdeas = useMemo(
+    () => dates.filter((d) => !d.date_time && d.status !== "done"),
+    [dates]
+  );
 
   const handleCreate = async () => {
     if (!day || !name.trim()) return;
@@ -54,6 +64,20 @@ export function DaySheet({
       setName("");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleAttach = async (id: string) => {
+    if (!day) return;
+    const [hh, mm] = time.split(":").map((s) => parseInt(s, 10));
+    const dt = new Date(day);
+    dt.setHours(hh ?? 19, mm ?? 0, 0, 0);
+    setAttaching(id);
+    try {
+      await onAttachLoose(id, dt.toISOString());
+      setShowLooseIdeas(false);
+    } finally {
+      setAttaching(null);
     }
   };
 
@@ -157,40 +181,98 @@ export function DaySheet({
               ))}
             </div>
 
-            {/* Quick add */}
+            {/* Add new — Hora compartilhada com "anexar ideia" */}
             <div className="space-y-3 border-t border-border bg-background/30 px-5 py-4 mt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Adicionar nesse dia
-              </p>
-              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] text-muted-foreground">Nome</Label>
-                  <Input
-                    placeholder='Ex: "Jantar no italiano"'
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                    className="h-10"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] text-muted-foreground">Hora</Label>
-                  <Input
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Adicionar nesse dia
+                </p>
+                <div className="flex items-center gap-1.5 rounded-full bg-card/80 px-2.5 py-1 ring-1 ring-border">
+                  <Clock className="h-3 w-3 text-muted-foreground" />
+                  <input
                     type="time"
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
-                    className="h-10 w-28 tabular"
+                    className="bg-transparent text-[12px] font-semibold tabular outline-none"
                   />
                 </div>
               </div>
-              <button
-                onClick={handleCreate}
-                disabled={!name.trim() || creating}
-                className={cn(btnPrimary, "w-full")}
-              >
-                <Plus className="h-4 w-4" />
-                {creating ? "Criando…" : "Adicionar"}
-              </button>
+
+              {/* Criar novo */}
+              <div className="space-y-2 rounded-2xl border border-border bg-card/40 p-3">
+                <Label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Criar novo date
+                </Label>
+                <Input
+                  placeholder='Ex: "Jantar no italiano"'
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  className="h-10"
+                />
+                <button
+                  onClick={handleCreate}
+                  disabled={!name.trim() || creating}
+                  className={cn(btnPrimary, "w-full")}
+                >
+                  <Plus className="h-4 w-4" />
+                  {creating ? "Criando…" : "Adicionar novo"}
+                </button>
+              </div>
+
+              {/* Anexar uma ideia solta */}
+              {looseIdeas.length > 0 && (
+                <div className="space-y-2 rounded-2xl border border-border bg-card/40 p-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowLooseIdeas((v) => !v)}
+                    className="flex w-full items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        Anexar ideia solta
+                      </span>
+                      <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tabular text-primary">
+                        {looseIdeas.length}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      {showLooseIdeas ? "Fechar" : "Ver"}
+                    </span>
+                  </button>
+
+                  <AnimatePresence initial={false}>
+                    {showLooseIdeas && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="space-y-1.5 pt-2">
+                          {looseIdeas.map((d) => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => handleAttach(d.id)}
+                              disabled={attaching === d.id}
+                              className="flex w-full items-center gap-2 rounded-xl border border-border/60 bg-background/40 px-3 py-2 text-left transition-all hover:border-primary/40 hover:bg-primary/[0.04] disabled:opacity-50"
+                            >
+                              <Heart className="h-3.5 w-3.5 shrink-0 text-primary" fill="currentColor" />
+                              <span className="flex-1 truncate text-sm">{d.name}</span>
+                              <span className="text-[11px] font-medium text-primary">
+                                {attaching === d.id ? "Anexando…" : "Marcar →"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
           </motion.div>
         </>
