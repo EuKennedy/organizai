@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Plus, Sparkles, Check, AlertTriangle } from "lucide-react";
+import { Plus, Sparkles, Check, AlertTriangle, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useMimos } from "@/hooks/use-mimos";
 import { useMimoCategories } from "@/hooks/use-mimo-categories";
@@ -32,18 +33,27 @@ export function MimosPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<MimoCategory | null>(null);
   const [showNewCategoryDialog, setShowNewCategoryDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return mimos.filter((m) => {
       if (statusFilter === "owned" && !m.owned) return false;
       if (statusFilter === "wish" && m.owned) return false;
       if (statusFilter === "finished" && !m.finished) return false;
       if (categoryFilter && m.category !== categoryFilter) return false;
+      if (q) {
+        const hay = `${m.brand} ${m.name} ${m.notes ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-  }, [mimos, statusFilter, categoryFilter]);
+  }, [mimos, statusFilter, categoryFilter, searchQuery]);
 
-  const activeFilters = (statusFilter !== "all" ? 1 : 0) + (categoryFilter ? 1 : 0);
+  const activeFilters =
+    (statusFilter !== "all" ? 1 : 0) +
+    (categoryFilter ? 1 : 0) +
+    (searchQuery.trim() ? 1 : 0);
 
   const stats = useMemo(() => {
     const owned = mimos.filter((m) => m.owned && !m.finished).length;
@@ -98,6 +108,7 @@ export function MimosPage() {
   const clearFilters = () => {
     setStatusFilter("all");
     setCategoryFilter(null);
+    setSearchQuery("");
   };
 
   return (
@@ -152,6 +163,28 @@ export function MimosPage() {
 
       {mimos.length > 0 && (
         <FilterBar active={activeFilters} onClear={clearFilters}>
+          <div className="space-y-2">
+            <FilterLabel>Buscar</FilterLabel>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+              <Input
+                placeholder="Marca, nome, anotações…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pl-9 pr-9"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-muted/40 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Limpar busca"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <FilterLabel>Status</FilterLabel>
             <div className="flex flex-wrap gap-1.5">

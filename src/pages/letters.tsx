@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Plus, Mail, X as XIcon } from "lucide-react";
+import { Plus, Mail, X as XIcon, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useLetters } from "@/hooks/use-letters";
 import { PageHero } from "@/components/page-hero";
@@ -19,11 +20,23 @@ export function LettersPage() {
   const [selected, setSelected] = useState<Letter | null>(null);
   const [mode, setMode] = useState<Mode>(null);
   const [moodFilter, setMoodFilter] = useState<LetterMood | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const filtered = useMemo(
-    () => (moodFilter ? letters.filter((l) => l.mood === moodFilter) : letters),
-    [letters, moodFilter]
-  );
+  const filtered = useMemo(() => {
+    let r = letters;
+    if (moodFilter) r = r.filter((l) => l.mood === moodFilter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      r = r.filter(
+        (l) =>
+          l.title.toLowerCase().includes(q) ||
+          l.body.toLowerCase().includes(q) ||
+          (l.author ?? "").toLowerCase().includes(q) ||
+          (l.recipient ?? "").toLowerCase().includes(q)
+      );
+    }
+    return r;
+  }, [letters, moodFilter, searchQuery]);
 
   const openReader = (l: Letter) => {
     setSelected(l);
@@ -98,6 +111,28 @@ export function LettersPage() {
           </button>
         }
       />
+
+      {/* Search */}
+      {letters.length > 0 && (
+        <div className="mb-4 relative max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            placeholder="Buscar título, conteúdo, autor…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-10 pl-9 pr-9"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-muted/40 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Limpar busca"
+            >
+              <XIcon className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Mood filter */}
       {letters.length > 0 && (

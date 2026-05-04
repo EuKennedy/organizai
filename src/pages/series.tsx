@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Plus, Tv, Star } from "lucide-react";
+import { Plus, Tv, Star, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useSeries } from "@/hooks/use-series";
 import {
@@ -26,6 +27,8 @@ export function SeriesPage() {
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
   const [ratingFilter, setRatingFilter] = useState(0);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
+  const [decadeFilter, setDecadeFilter] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const availableGenres = useMemo(() => {
     const set = new Set<string>();
@@ -33,17 +36,43 @@ export function SeriesPage() {
     return Array.from(set).sort();
   }, [series]);
 
+  const availableDecades = useMemo(() => {
+    const set = new Set<number>();
+    series.forEach((s) => {
+      if (s.first_air_year > 0) set.add(Math.floor(s.first_air_year / 10) * 10);
+    });
+    return Array.from(set).sort((a, b) => b - a);
+  }, [series]);
+
   const filtered = useMemo(() => {
     let r = series;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      r = r.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          s.original_title.toLowerCase().includes(q) ||
+          s.cast.some((c) => c.toLowerCase().includes(q))
+      );
+    }
     if (ratingFilter > 0) r = r.filter((s) => s.personal_rating === ratingFilter);
     if (genreFilter) r = r.filter((s) => s.genres.includes(genreFilter));
+    if (decadeFilter !== null)
+      r = r.filter(
+        (s) =>
+          s.first_air_year >= decadeFilter && s.first_air_year < decadeFilter + 10
+      );
     return r;
-  }, [series, ratingFilter, genreFilter]);
+  }, [series, searchQuery, ratingFilter, genreFilter, decadeFilter]);
 
   const watching = filtered.filter((s) => s.status === "watching");
   const wantToWatch = filtered.filter((s) => s.status === "want_to_watch");
   const watched = filtered.filter((s) => s.status === "watched");
-  const activeFilters = (ratingFilter > 0 ? 1 : 0) + (genreFilter ? 1 : 0);
+  const activeFilters =
+    (ratingFilter > 0 ? 1 : 0) +
+    (genreFilter ? 1 : 0) +
+    (decadeFilter !== null ? 1 : 0) +
+    (searchQuery.trim() ? 1 : 0);
 
   const heroBackdrop = useMemo(() => {
     const c =
@@ -120,6 +149,8 @@ export function SeriesPage() {
 
   const clearFilters = () => {
     setRatingFilter(0);
+    setDecadeFilter(null);
+    setSearchQuery("");
     setGenreFilter(null);
   };
 
@@ -149,6 +180,51 @@ export function SeriesPage() {
 
       {series.length > 0 && (
         <FilterBar active={activeFilters} onClear={clearFilters}>
+          <div className="space-y-2">
+            <FilterLabel>Buscar</FilterLabel>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+              <Input
+                placeholder="Título ou elenco…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pl-9 pr-9"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-muted/40 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Limpar busca"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {availableDecades.length > 0 && (
+            <div className="space-y-2">
+              <FilterLabel>Década</FilterLabel>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => setDecadeFilter(null)}
+                  className={cn(chip, decadeFilter === null ? chipActive : chipIdle)}
+                >
+                  Todas
+                </button>
+                {availableDecades.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setDecadeFilter(d === decadeFilter ? null : d)}
+                    className={cn(chip, decadeFilter === d ? chipActive : chipIdle)}
+                  >
+                    {d}s
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <FilterLabel>Avaliação</FilterLabel>
             <div className="flex flex-wrap items-center gap-2">

@@ -167,7 +167,7 @@ export function DateCalendar({
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7 gap-1 px-1">
+      <div className="grid grid-cols-7 gap-1 px-1 sm:gap-1.5">
         {days.map((d, idx) => {
           const inMonth = isSameMonth(d, new Date(year, month));
           const today = isToday(d);
@@ -181,47 +181,68 @@ export function DateCalendar({
               key={idx}
               type="button"
               onClick={() => onDayClick(d)}
+              aria-label={format(d, "EEEE d 'de' MMMM", { locale: ptBR })}
+              aria-pressed={isSelected ?? undefined}
               className={cn(
-                "group relative aspect-square min-h-[44px] rounded-xl text-left transition-all",
-                "flex flex-col items-stretch p-1.5",
-                inMonth ? "" : "opacity-30",
-                isSelected
-                  ? "bg-primary/15 ring-2 ring-primary/60"
-                  : today
-                  ? "bg-primary/5 ring-1 ring-primary/30 hover:bg-primary/10"
-                  : list.length > 0
-                  ? "bg-card hover:bg-muted/40 ring-1 ring-border/60"
-                  : "hover:bg-muted/30"
+                "group relative aspect-square min-h-[42px] sm:min-h-[48px] rounded-xl",
+                "flex items-center justify-center p-0.5 sm:p-1",
+                "transition-colors duration-150",
+                inMonth ? "" : "opacity-30 pointer-events-none"
               )}
             >
+              {/* Inner circle — handles all visual states */}
               <span
                 className={cn(
-                  "text-[12px] font-semibold tabular leading-none",
-                  today ? "text-primary" : past ? "text-muted-foreground/60" : "text-foreground"
+                  "relative flex h-full w-full flex-col items-center justify-center rounded-full transition-all duration-200",
+                  isSelected
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 scale-100"
+                    : today
+                    ? "ring-1 ring-primary/50 text-primary group-hover:bg-primary/8"
+                    : list.length > 0
+                    ? "bg-card text-foreground ring-1 ring-border/50 group-hover:ring-border/80 group-hover:bg-muted/40"
+                    : past
+                    ? "text-muted-foreground/55 group-hover:bg-muted/30"
+                    : "text-foreground group-hover:bg-muted/40"
                 )}
               >
-                {format(d, "d", { locale: ptBR })}
-              </span>
-
-              {/* Status dots */}
-              {list.length > 0 && (
-                <div className="mt-auto flex items-center gap-0.5">
-                  {list.slice(0, 3).map((dt) => (
-                    <span
-                      key={dt.id}
-                      className={cn(
-                        "h-1.5 w-1.5 rounded-full",
-                        statusDotClass(dt.status)
-                      )}
-                    />
-                  ))}
-                  {list.length > 3 && (
-                    <span className="text-[8.5px] font-semibold tabular text-muted-foreground">
-                      +{list.length - 3}
-                    </span>
+                <span
+                  className={cn(
+                    "text-[12.5px] sm:text-[13px] font-semibold tabular leading-none",
+                    list.length > 0 && !isSelected && "mt-0.5"
                   )}
-                </div>
-              )}
+                >
+                  {format(d, "d", { locale: ptBR })}
+                </span>
+
+                {/* Status dots — centered below number */}
+                {list.length > 0 && (
+                  <span className="mt-1 flex items-center gap-[3px]">
+                    {list.slice(0, 3).map((dt) => (
+                      <span
+                        key={dt.id}
+                        className={cn(
+                          "h-[5px] w-[5px] rounded-full transition-colors",
+                          isSelected
+                            ? "bg-primary-foreground/85"
+                            : statusDotClass(dt.status)
+                        )}
+                      />
+                    ))}
+                    {list.length > 3 && (
+                      <span
+                        className={cn(
+                          "text-[8.5px] font-semibold tabular leading-none",
+                          isSelected
+                            ? "text-primary-foreground/80"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        +{list.length - 3}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </span>
             </button>
           );
         })}

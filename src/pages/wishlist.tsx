@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Plus, ShoppingBag, Check, AlertTriangle, Sparkles } from "lucide-react";
+import { Plus, ShoppingBag, Check, AlertTriangle, Sparkles, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { WishlistCarousel } from "@/components/wishlist/wishlist-carousel";
@@ -49,21 +50,28 @@ export function WishlistPage() {
   const [statusFilter, setStatusFilter] = useState<WishlistStatus | "all">("all");
   const [priorityFilter, setPriorityFilter] = useState<WishlistPriority | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<WishlistCategory | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [showNewCategoryDialog, setShowNewCategoryDialog] = useState(false);
 
   const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return items.filter((m) => {
       if (statusFilter !== "all" && m.status !== statusFilter) return false;
       if (priorityFilter !== "all" && m.priority !== priorityFilter) return false;
       if (categoryFilter && m.category !== categoryFilter) return false;
+      if (q) {
+        const hay = `${m.brand ?? ""} ${m.name} ${m.notes ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-  }, [items, statusFilter, priorityFilter, categoryFilter]);
+  }, [items, statusFilter, priorityFilter, categoryFilter, searchQuery]);
 
   const activeFilters =
     (statusFilter !== "all" ? 1 : 0) +
     (priorityFilter !== "all" ? 1 : 0) +
-    (categoryFilter ? 1 : 0);
+    (categoryFilter ? 1 : 0) +
+    (searchQuery.trim() ? 1 : 0);
 
   const stats = useMemo(() => {
     const querendo = items.filter((i) => i.status === "querendo");
@@ -130,6 +138,7 @@ export function WishlistPage() {
   const clearFilters = () => {
     setStatusFilter("all");
     setPriorityFilter("all");
+    setSearchQuery("");
     setCategoryFilter(null);
   };
 
@@ -187,6 +196,28 @@ export function WishlistPage() {
 
       {items.length > 0 && (
         <FilterBar active={activeFilters} onClear={clearFilters}>
+          <div className="space-y-2">
+            <FilterLabel>Buscar</FilterLabel>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+              <Input
+                placeholder="Marca, item, anotação…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pl-9 pr-9"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-muted/40 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Limpar busca"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <FilterLabel>Status</FilterLabel>
             <div className="flex flex-wrap gap-1.5">
