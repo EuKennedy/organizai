@@ -236,8 +236,12 @@ Deno.serve(async (req) => {
   const { data: subs, error: subsErr } = await admin
     .from("push_subscriptions")
     .select("*")
-    .eq("couple_id", coupleId)
-    .neq("user_id", createdBy);
+    .eq("couple_id", coupleId);
+  // Note: NÃO filtramos por user_id != createdBy aqui. Quando o casal
+  // compartilha a mesma conta auth (mesmo user_id), esse filtro excluiria
+  // ambos os devices. A dedup "não notificar quem inseriu" é feita no SW
+  // de cada device via IndexedDB (src/lib/recent-inserts.ts), que checa
+  // o {table, id} antes de mostrar a notificação.
 
   if (subsErr) {
     return new Response(JSON.stringify({ error: subsErr.message }), {
