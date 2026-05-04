@@ -36,7 +36,7 @@ const NAV_ITEMS = [
   { to: "/letters", label: "Textos", icon: Mail },
   { to: "/expenses", label: "Despesas", icon: Receipt },
   { to: "/goals", label: "Metas", icon: Target },
-  { to: "/settings", label: "Casal", icon: Settings },
+  { to: "/settings", label: "Ajustes", icon: Settings },
 ] as const;
 
 const CURRENT_LABEL: Record<string, string> = {
@@ -51,7 +51,7 @@ const CURRENT_LABEL: Record<string, string> = {
   "/letters": "Textos",
   "/expenses": "Despesas",
   "/goals": "Metas",
-  "/settings": "Casal",
+  "/settings": "Ajustes",
 };
 
 export function Sidebar() {

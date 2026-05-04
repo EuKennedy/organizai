@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "./sidebar";
 import { CoupleProvider } from "@/hooks/use-couple";
-import { CoupleOnboarding } from "@/components/couple-onboarding";
 import { UpdatePrompt } from "@/components/update-prompt";
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -15,7 +14,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
-      <CoupleOnboarding />
       <UpdatePrompt />
     </CoupleProvider>
   );
