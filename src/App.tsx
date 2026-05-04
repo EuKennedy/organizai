@@ -8,6 +8,8 @@ import { DatesPage } from "@/pages/dates";
 import { ExpensesPage } from "@/pages/expenses";
 import { GoalsPage } from "@/pages/goals";
 import { MimosPage } from "@/pages/mimos";
+import { WishlistPage } from "@/pages/wishlist";
+import { BabyNamesPage } from "@/pages/baby-names";
 import { GalleryPage } from "@/pages/gallery";
 import { GalleryAlbumPage } from "@/pages/gallery-album";
 import { LettersPage } from "@/pages/letters";
@@ -55,6 +57,8 @@ export function App() {
                 <Route path="/series" element={<SeriesPage />} />
                 <Route path="/dates" element={<DatesPage />} />
                 <Route path="/mimos" element={<MimosPage />} />
+                <Route path="/wishlist" element={<WishlistPage />} />
+                <Route path="/baby-names" element={<BabyNamesPage />} />
                 <Route path="/gallery" element={<GalleryPage />} />
                 <Route path="/gallery/:id" element={<GalleryAlbumPage />} />
                 <Route path="/letters" element={<LettersPage />} />

@@ -264,3 +264,85 @@ export function slugifyCategory(input: string): string {
     .replace(/^_+|_+$/g, "")
     .slice(0, 40);
 }
+
+// =============================================================================
+// WISHLIST (Coisas que queremos comprar)
+// =============================================================================
+
+export type WishlistCategory = string;
+
+export type WishlistPriority = "baixa" | "media" | "alta";
+export type WishlistStatus = "querendo" | "comprado" | "desistido";
+
+export interface WishlistCategoryDef {
+  value: WishlistCategory;
+  label: string;
+  emoji: string;
+  custom?: boolean;
+}
+
+export interface WishlistCustomCategoryRow {
+  id: string;
+  user_id: string;
+  value: string;
+  label: string;
+  emoji: string;
+  created_at: string;
+}
+
+export interface WishlistItem {
+  id: string;
+  user_id: string;
+  category: WishlistCategory;
+  name: string;
+  brand: string | null;
+  link: string | null;
+  image_url: string | null;
+  price: number | null;
+  priority: WishlistPriority;
+  status: WishlistStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const DEFAULT_WISHLIST_CATEGORIES: WishlistCategoryDef[] = [
+  { value: "casa", label: "Casa", emoji: "🏠" },
+  { value: "eletronicos", label: "Eletrônicos", emoji: "📱" },
+  { value: "roupas", label: "Roupas", emoji: "👕" },
+  { value: "viagem", label: "Viagem", emoji: "✈️" },
+  { value: "hobbies", label: "Hobbies", emoji: "🎨" },
+  { value: "outros", label: "Outros", emoji: "🛒" },
+];
+
+export const DEFAULT_WISHLIST_CATEGORY_MAP: Record<string, WishlistCategoryDef> =
+  Object.fromEntries(DEFAULT_WISHLIST_CATEGORIES.map((c) => [c.value, c]));
+
+export const UNKNOWN_WISHLIST_CATEGORY: WishlistCategoryDef = {
+  value: "__unknown__",
+  label: "Outros",
+  emoji: "🛒",
+};
+
+// =============================================================================
+// BABY NAMES (Nomes dos nossos filhos)
+// =============================================================================
+
+export type BabyGender = "menino" | "menina" | "unissex";
+
+export interface BabyName {
+  id: string;
+  user_id: string;
+  name: string;
+  gender: BabyGender;
+  favorite: boolean;
+  origin: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export const BABY_GENDERS: { value: BabyGender; label: string; emoji: string }[] = [
+  { value: "menino", label: "Menino", emoji: "👦" },
+  { value: "menina", label: "Menina", emoji: "👧" },
+  { value: "unissex", label: "Unissex", emoji: "🤍" },
+];
