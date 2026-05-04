@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { authStorage, AUTH_STORAGE_KEY, clearAuthStorage } from "@/lib/auth-storage";
+import { recordRecentInsert, TRACKED_TABLES } from "@/lib/recent-inserts";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -50,12 +51,43 @@ function isJwtFailure(bodyText: string): boolean {
   );
 }
 
+/**
+ * After a successful POST insert to /rest/v1/<table>, record the inserted
+ * row id(s) in IndexedDB so the Service Worker can suppress the matching
+ * push notification (the one we ourselves triggered).
+ */
+async function trackInsertResponse(url: string, res: Response): Promise<void> {
+  try {
+    const m = url.match(/\/rest\/v1\/([^?\/]+)/);
+    const table = m?.[1];
+    if (!table || !TRACKED_TABLES.has(table)) return;
+    const text = await res.clone().text();
+    if (!text) return;
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return;
+    }
+    const rows = Array.isArray(data) ? data : [data];
+    for (const row of rows) {
+      const id = (row as { id?: string } | null)?.id;
+      if (typeof id === "string" && id) {
+        void recordRecentInsert(table, id);
+      }
+    }
+  } catch {
+    /* never throw from a side effect */
+  }
+}
+
 const customFetch: typeof fetch = async (input, init) => {
   const res = await fetch(input, init);
-  // Only inspect same-origin-ish responses (Supabase / Worker URL)
   const url = typeof input === "string" ? input : (input as Request).url;
+  const method = (init?.method ?? "GET").toUpperCase();
+
+  // 401 → broken session
   if (url && url.startsWith(supabaseUrl) && res.status === 401) {
-    // Peek the body without consuming it.
     try {
       const clone = res.clone();
       const text = await clone.text();
@@ -63,9 +95,21 @@ const customFetch: typeof fetch = async (input, init) => {
         void handleBrokenSession();
       }
     } catch {
-      // If we can't read it, do nothing.
+      /* ignore */
     }
   }
+
+  // Successful insert → mark in IDB for SW suppression
+  if (
+    res.ok &&
+    method === "POST" &&
+    url &&
+    url.startsWith(supabaseUrl) &&
+    url.includes("/rest/v1/")
+  ) {
+    void trackInsertResponse(url, res);
+  }
+
   return res;
 };
 

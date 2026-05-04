@@ -10,6 +10,7 @@ import { registerRoute, NavigationRoute } from "workbox-routing";
 import { CacheFirst } from "workbox-strategies";
 import { ExpirationPlugin } from "workbox-expiration";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
+import { isRecentSelfInsert } from "./lib/recent-inserts";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -102,6 +103,10 @@ interface PushPayload {
   url?: string;
   icon?: string;
   tag?: string;
+  /** Origin row table — used for self-insert suppression (same-account case). */
+  table?: string;
+  /** Origin row id — used for self-insert suppression. */
+  id?: string;
 }
 
 self.addEventListener("push", (event) => {
@@ -134,7 +139,20 @@ self.addEventListener("push", (event) => {
     requireInteraction: false,
   };
 
-  e.waitUntil(self.registration.showNotification(title, options));
+  e.waitUntil(
+    (async () => {
+      // Same-account dedup: if this device just inserted the row, skip the push.
+      if (payload?.table && payload?.id) {
+        try {
+          const isSelf = await isRecentSelfInsert(payload.table, payload.id);
+          if (isSelf) return;
+        } catch {
+          /* on error, fall through and show */
+        }
+      }
+      await self.registration.showNotification(title, options);
+    })()
+  );
 });
 
 // -----------------------------------------------------------------------------

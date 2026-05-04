@@ -218,17 +218,19 @@ Deno.serve(async (req) => {
   const authorName =
     (authorRow?.display_name as string | undefined) || "Seu amor";
 
-  const payload = buildPayload(
-    table,
-    record,
-    authorName
-  );
-  if (!payload) {
+  const built = buildPayload(table, record, authorName);
+  if (!built) {
     return new Response(JSON.stringify({ skipped: "no payload" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   }
+  // Enrich with table + id so the SW can self-suppress (same-account dedup)
+  const payload = {
+    ...built,
+    table,
+    id: typeof record.id === "string" ? record.id : "",
+  };
 
   // Buscar TODOS os subs do casal exceto os do autor
   const { data: subs, error: subsErr } = await admin
