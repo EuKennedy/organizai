@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       includeAssets: [
         "favicon.svg",
         "favicon-32.png",
@@ -115,6 +115,11 @@ export default defineConfig({
     }),
   ],
   base: "/organizai/",
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      new Date().toISOString().slice(0, 16).replace("T", " ")
+    ),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
