@@ -174,7 +174,7 @@ function DeviceNamesSection() {
 
       <p className="mb-4 text-[13px] text-muted-foreground">
         Quando alguém adiciona algo, a notificação chega no outro com o nome
-        certo: <span className="font-semibold text-foreground">"Júlia adicionou um filme"</span> em vez de
+        certo: <span className="font-semibold text-foreground">"Julia adicionou um filme"</span> em vez de
         algo genérico.
       </p>
 
@@ -198,7 +198,7 @@ function DeviceNamesSection() {
             Android
           </Label>
           <Input
-            placeholder="Ex: Júlia"
+            placeholder="Ex: Julia"
             value={androidName}
             onChange={(e) => setAndroidName(e.target.value)}
             className="h-10"
