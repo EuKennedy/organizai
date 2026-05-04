@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Pencil, Trash2 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { X, Pencil, Trash2, Lock } from "lucide-react";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { LETTER_MOOD_MAP, type Letter } from "@/types";
@@ -22,6 +22,10 @@ const TONE_BG: Record<string, string> = {
 export function LetterReader({ letter, onClose, onEdit, onDelete }: LetterReaderProps) {
   const mood = letter ? LETTER_MOOD_MAP[letter.mood] : null;
   const toneBg = mood ? TONE_BG[mood.tone] ?? "bg-ambient-rose" : "bg-ambient-rose";
+
+  const isSealed =
+    !!letter?.unlock_at &&
+    new Date(letter.unlock_at).getTime() > Date.now();
 
   return (
     <AnimatePresence>
@@ -91,24 +95,74 @@ export function LetterReader({ letter, onClose, onEdit, onDelete }: LetterReader
             {/* Letter body */}
             <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-10 sm:py-8">
               <div className="mx-auto max-w-xl">
-                {(letter.recipient || letter.author) && (
-                  <div className="mb-6 text-sm text-muted-foreground">
-                    {letter.recipient && (
-                      <p className="font-serif italic">
-                        Para <span className="font-semibold not-italic text-foreground">{letter.recipient}</span>,
+                {isSealed ? (
+                  <div className="space-y-6 text-center">
+                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/30">
+                      <Lock className="h-9 w-9 text-primary" strokeWidth={1.5} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                        Cartinha selada
+                      </p>
+                      <h3 className="mt-2 font-serif text-2xl font-medium tracking-tight">
+                        Esse texto tá guardado pro futuro
+                      </h3>
+                      <p className="mt-3 max-w-sm mx-auto text-sm text-muted-foreground leading-relaxed">
+                        Vocês decidiram que essa carta só pode ser aberta em uma data
+                        especial. Vai liberar{" "}
+                        <span className="font-semibold text-foreground">
+                          {formatDistanceToNow(new Date(letter.unlock_at!), {
+                            addSuffix: true,
+                            locale: ptBR,
+                          })}
+                        </span>
+                        .
+                      </p>
+                    </div>
+                    <div className="inline-flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/[0.04] px-5 py-3">
+                      <div className="text-left">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          Abre em
+                        </p>
+                        <p className="mt-0.5 font-serif text-lg font-semibold tabular text-primary">
+                          {format(
+                            new Date(letter.unlock_at!),
+                            "dd 'de' MMMM, yyyy",
+                            { locale: ptBR }
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {(letter.recipient || letter.author) && (
+                      <div className="mb-6 text-sm text-muted-foreground">
+                        {letter.recipient && (
+                          <p className="font-serif italic">
+                            Para{" "}
+                            <span className="font-semibold not-italic text-foreground">
+                              {letter.recipient}
+                            </span>
+                            ,
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="whitespace-pre-wrap break-words font-serif text-[16px] leading-[1.7] text-foreground/90 sm:text-[17px] sm:leading-[1.75]">
+                      {letter.body}
+                    </div>
+
+                    {letter.author && (
+                      <p className="mt-10 text-right font-serif italic text-sm text-foreground/70">
+                        —{" "}
+                        <span className="font-semibold not-italic text-foreground">
+                          {letter.author}
+                        </span>
                       </p>
                     )}
-                  </div>
-                )}
-
-                <div className="whitespace-pre-wrap break-words font-serif text-[16px] leading-[1.7] text-foreground/90 sm:text-[17px] sm:leading-[1.75]">
-                  {letter.body}
-                </div>
-
-                {letter.author && (
-                  <p className="mt-10 text-right font-serif italic text-sm text-foreground/70">
-                    — <span className="font-semibold not-italic text-foreground">{letter.author}</span>
-                  </p>
+                  </>
                 )}
               </div>
             </div>

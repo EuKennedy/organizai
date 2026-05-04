@@ -144,6 +144,8 @@ export interface Letter {
   author: string | null;
   recipient: string | null;
   mood: LetterMood;
+  /** Sealed letter — only readable when Date.now() >= unlock_at. Null = always open. */
+  unlock_at: string | null;
   created_at: string;
   updated_at: string;
 }

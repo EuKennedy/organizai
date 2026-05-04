@@ -60,6 +60,7 @@ export function LettersPage() {
     author: string | null;
     recipient: string | null;
     mood: LetterMood;
+    unlock_at: string | null;
   }) => {
     try {
       if (input.id) {
@@ -69,11 +70,12 @@ export function LettersPage() {
           author: input.author,
           recipient: input.recipient,
           mood: input.mood,
+          unlock_at: input.unlock_at,
         });
         toast.success("Carta atualizada");
       } else {
         await createLetter(input);
-        toast.success("Carta guardada");
+        toast.success(input.unlock_at ? "Cartinha selada 🔒" : "Carta guardada");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao salvar");

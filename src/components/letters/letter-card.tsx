@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LETTER_MOOD_MAP, type Letter } from "@/types";
 
@@ -31,10 +32,19 @@ export function LetterCard({ letter, onOpen, index = 0 }: LetterCardProps) {
   const toneBg = TONE_BG[mood.tone] ?? "bg-ambient-rose";
   const toneAccent = TONE_ACCENT[mood.tone] ?? TONE_ACCENT.coral;
 
-  const preview = letter.body
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 220);
+  const isSealed =
+    !!letter.unlock_at && new Date(letter.unlock_at).getTime() > Date.now();
+
+  const preview = isSealed
+    ? ""
+    : letter.body.replace(/\s+/g, " ").trim().slice(0, 220);
+
+  const unlockLabel = letter.unlock_at
+    ? formatDistanceToNow(new Date(letter.unlock_at), {
+        addSuffix: true,
+        locale: ptBR,
+      })
+    : "";
 
   return (
     <motion.button
@@ -71,7 +81,8 @@ export function LetterCard({ letter, onOpen, index = 0 }: LetterCardProps) {
             </span>
           </div>
 
-          <h3 className="mt-4 font-serif text-[22px] font-medium leading-tight tracking-tight sm:text-2xl line-clamp-2">
+          <h3 className="mt-4 flex items-center gap-2 font-serif text-[22px] font-medium leading-tight tracking-tight sm:text-2xl line-clamp-2">
+            {isSealed && <Lock className="h-4 w-4 shrink-0 text-primary" />}
             {letter.title}
           </h3>
 
@@ -83,15 +94,30 @@ export function LetterCard({ letter, onOpen, index = 0 }: LetterCardProps) {
             </p>
           )}
 
-          {preview && (
-            <p className="mt-4 line-clamp-4 font-serif text-[14px] italic leading-relaxed text-foreground/75">
-              “{preview}{letter.body.length > preview.length ? "…" : ""}”
-            </p>
+          {isSealed ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+                Selada
+              </p>
+              <p className="mt-0.5 font-serif text-[13.5px] italic text-foreground/85">
+                Abre {unlockLabel} ·{" "}
+                {format(new Date(letter.unlock_at!), "dd MMM yyyy", {
+                  locale: ptBR,
+                })}
+              </p>
+            </div>
+          ) : (
+            preview && (
+              <p className="mt-4 line-clamp-4 font-serif text-[14px] italic leading-relaxed text-foreground/75">
+                "{preview}
+                {letter.body.length > preview.length ? "…" : ""}"
+              </p>
+            )
           )}
 
           <div className="mt-5 flex items-center justify-between text-[11px] font-medium text-muted-foreground/80">
             <span className="inline-flex items-center gap-1 uppercase tracking-[0.14em]">
-              Abrir carta
+              {isSealed ? "Ver detalhes" : "Abrir carta"}
               <span className="transition-transform duration-200 group-hover:translate-x-0.5">→</span>
             </span>
           </div>

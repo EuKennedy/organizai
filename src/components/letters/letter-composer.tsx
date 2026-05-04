@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Save, Trash2 } from "lucide-react";
+import { X, Save, Trash2, Lock, Unlock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +19,7 @@ interface LetterComposerProps {
     author: string | null;
     recipient: string | null;
     mood: LetterMood;
+    unlock_at: string | null;
   }) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
 }
@@ -36,6 +37,8 @@ export function LetterComposer({
   const [author, setAuthor] = useState("");
   const [recipient, setRecipient] = useState("");
   const [mood, setMood] = useState<LetterMood>("amor");
+  const [unlockEnabled, setUnlockEnabled] = useState(false);
+  const [unlockDate, setUnlockDate] = useState(""); // YYYY-MM-DD
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -47,12 +50,21 @@ export function LetterComposer({
       setAuthor(letter.author ?? "");
       setRecipient(letter.recipient ?? "");
       setMood(letter.mood);
+      if (letter.unlock_at) {
+        setUnlockEnabled(true);
+        setUnlockDate(new Date(letter.unlock_at).toISOString().slice(0, 10));
+      } else {
+        setUnlockEnabled(false);
+        setUnlockDate("");
+      }
     } else {
       setTitle("");
       setBody("");
       setAuthor("");
       setRecipient("");
       setMood("amor");
+      setUnlockEnabled(false);
+      setUnlockDate("");
     }
     // autofocus after mount
     setTimeout(() => titleRef.current?.focus(), 120);
@@ -60,6 +72,12 @@ export function LetterComposer({
 
   const handleSave = async () => {
     if (!title.trim() || !body.trim()) return;
+    let unlockIso: string | null = null;
+    if (unlockEnabled && unlockDate) {
+      // Set to 09:00 local on that day so it unlocks "in the morning"
+      const d = new Date(`${unlockDate}T09:00:00`);
+      if (!Number.isNaN(d.getTime())) unlockIso = d.toISOString();
+    }
     setSaving(true);
     try {
       await onSave({
@@ -69,6 +87,7 @@ export function LetterComposer({
         author: author.trim() || null,
         recipient: recipient.trim() || null,
         mood,
+        unlock_at: unlockIso,
       });
       onClose();
     } finally {
@@ -201,6 +220,90 @@ export function LetterComposer({
                 <p className="text-[10.5px] text-muted-foreground tabular">
                   {body.length} {body.length === 1 ? "caractere" : "caracteres"}
                 </p>
+              </div>
+
+              {/* Seal — abrir somente em data X */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setUnlockEnabled((v) => !v)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-2xl border px-4 py-3 transition-all",
+                    unlockEnabled
+                      ? "border-primary/50 bg-primary/[0.05]"
+                      : "border-border bg-card/40 hover:bg-card/70"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "flex h-9 w-9 items-center justify-center rounded-2xl ring-1",
+                        unlockEnabled
+                          ? "bg-primary/15 ring-primary/30"
+                          : "bg-muted/40 ring-border"
+                      )}
+                    >
+                      {unlockEnabled ? (
+                        <Lock className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Unlock className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-[13px] font-semibold tracking-tight">
+                        Cartinha selada pro futuro
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {unlockEnabled
+                          ? "Vocês só vão poder ler a partir da data escolhida"
+                          : "Liberada na hora — qualquer um pode ler já"}
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "relative h-6 w-10 shrink-0 rounded-full transition-colors",
+                      unlockEnabled ? "bg-primary" : "bg-muted"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+                        unlockEnabled ? "left-[18px]" : "left-0.5"
+                      )}
+                    />
+                  </div>
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {unlockEnabled && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-1.5 pt-1">
+                        <Label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          Abre em
+                        </Label>
+                        <Input
+                          type="date"
+                          value={unlockDate}
+                          min={new Date(Date.now() + 24 * 3600 * 1000)
+                            .toISOString()
+                            .slice(0, 10)}
+                          onChange={(e) => setUnlockDate(e.target.value)}
+                          className="h-10 tabular"
+                        />
+                        <p className="text-[10.5px] text-muted-foreground">
+                          Vai destravar às 9h da manhã do dia escolhido.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 

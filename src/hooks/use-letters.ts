@@ -43,6 +43,7 @@ export function useLetters() {
       author?: string | null;
       recipient?: string | null;
       mood?: LetterMood;
+      unlock_at?: string | null;
     }): Promise<Letter> => {
       if (!user || !couple) throw new Error("Não autenticado");
       const payload = {
@@ -54,6 +55,7 @@ export function useLetters() {
         author: input.author?.trim() || null,
         recipient: input.recipient?.trim() || null,
         mood: input.mood ?? "amor",
+        unlock_at: input.unlock_at ?? null,
       };
       const { data, error } = await supabase
         .from("letters")

@@ -14,6 +14,12 @@ import { useMovies } from "@/hooks/use-movies";
 import { useGallery } from "@/hooks/use-gallery";
 import { posterUrl, backdropUrl } from "@/lib/tmdb";
 import {
+  ActivityFeed,
+  ActivityFeedHeader,
+} from "@/components/activity/activity-feed";
+import { PullToRefresh } from "@/components/pull-to-refresh";
+import { useActivityFeed } from "@/hooks/use-activity-feed";
+import {
   COUPLE_START_DATE,
   daysTogether,
   togetherBreakdown,
@@ -39,8 +45,9 @@ export function HomePage() {
     return () => clearInterval(id);
   }, []);
 
-  const { movies } = useMovies();
-  const { photos } = useGallery();
+  const { movies, refetch: refetchMovies } = useMovies();
+  const { photos, refetch: refetchGallery } = useGallery();
+  const { refetch: refetchActivity } = useActivityFeed();
 
   const days = daysTogether(now);
   const breakdown = togetherBreakdown(now);
@@ -80,7 +87,12 @@ export function HomePage() {
       : null;
   }, [movieStats]);
 
+  const handleRefresh = async () => {
+    await Promise.all([refetchMovies(), refetchGallery(), refetchActivity()]);
+  };
+
   return (
+    <PullToRefresh onRefresh={handleRefresh}>
     <div className="space-y-6 sm:space-y-8">
       {/* HERO — greeting + days-together counter */}
       <section className="relative -mx-4 -mt-6 overflow-hidden px-4 pb-10 pt-10 sm:-mx-6 sm:rounded-b-[32px] sm:px-8 sm:pb-12 sm:pt-14 lg:-mx-8 lg:px-10">
@@ -148,12 +160,19 @@ export function HomePage() {
         </motion.div>
       </section>
 
+      {/* ACTIVITY FEED — TIMELINE EDITORIAL */}
+      <section className="mt-10 sm:mt-12">
+        <ActivityFeedHeader title="Nossa linha do tempo" />
+        <ActivityFeed limit={20} />
+      </section>
+
       {/* MOVIES SNAPSHOT */}
       <MoviesSnapshot stats={movieStats} />
 
       {/* GALLERY THUMBNAILS */}
       <GallerySnapshot recent={recentPhotos} />
     </div>
+    </PullToRefresh>
   );
 }
 
