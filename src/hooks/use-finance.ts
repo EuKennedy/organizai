@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useCouple } from "@/hooks/use-couple";
+import { useRealtimeRefetch } from "@/hooks/use-realtime";
 import type { Transaction, FinancialGoal, GoalDeposit } from "@/types";
 
 export function useTransactions() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchTransactions = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -18,7 +21,6 @@ export function useTransactions() {
       const { data } = await supabase
         .from("transactions")
         .select("*")
-        .eq("user_id", user.id)
         .order("date", { ascending: false });
       setTransactions((data as Transaction[] | null) ?? []);
     } catch (err) {
@@ -26,15 +28,19 @@ export function useTransactions() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
 
+  useRealtimeRefetch(couple?.id ?? null, ["transactions"], fetchTransactions);
+
   const addTransaction = async (t: Omit<Transaction, "id" | "user_id" | "created_at">) => {
-    if (!user) return;
-    const { error } = await supabase.from("transactions").insert({ ...t, user_id: user.id });
+    if (!user || !couple) return;
+    const { error } = await supabase
+      .from("transactions")
+      .insert({ ...t, user_id: user.id, couple_id: couple.id, created_by: user.id });
     if (error) throw new Error(error.message);
     await fetchTransactions();
   };
@@ -48,19 +54,15 @@ export function useTransactions() {
   return { transactions, loading, addTransaction, deleteTransaction, refetch: fetchTransactions };
 }
 
-/**
- * Goals + their deposits. A deposit is an atomic record of money added
- * (or initially seeded). The goal's current_amount is kept in sync with
- * the sum of deposits on every write.
- */
 export function useGoals() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
   const [deposits, setDeposits] = useState<GoalDeposit[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -70,12 +72,10 @@ export function useGoals() {
         supabase
           .from("financial_goals")
           .select("*")
-          .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("goal_deposits")
           .select("*")
-          .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
       ]);
       setGoals((goalsRes.data as FinancialGoal[] | null) ?? []);
@@ -85,17 +85,25 @@ export function useGoals() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
+  useRealtimeRefetch(
+    couple?.id ?? null,
+    ["financial_goals", "goal_deposits"],
+    fetchAll
+  );
+
   const addGoal = async (
     g: Omit<FinancialGoal, "id" | "user_id" | "created_at" | "updated_at">
   ) => {
-    if (!user) return;
-    const { error } = await supabase.from("financial_goals").insert({ ...g, user_id: user.id });
+    if (!user || !couple) return;
+    const { error } = await supabase
+      .from("financial_goals")
+      .insert({ ...g, user_id: user.id, couple_id: couple.id, created_by: user.id });
     if (error) throw new Error(error.message);
     await fetchAll();
   };
@@ -112,9 +120,8 @@ export function useGoals() {
     await fetchAll();
   };
 
-  /** Register a deposit AND update the goal's current_amount. */
   const addDeposit = async (goalId: string, amount: number, note?: string) => {
-    if (!user) throw new Error("Não autenticado");
+    if (!user || !couple) throw new Error("Não autenticado");
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error("Valor inválido");
     }
@@ -123,6 +130,8 @@ export function useGoals() {
 
     const { error: insertError } = await supabase.from("goal_deposits").insert({
       user_id: user.id,
+      couple_id: couple.id,
+      created_by: user.id,
       goal_id: goalId,
       amount,
       note: note?.trim() || null,
@@ -139,7 +148,6 @@ export function useGoals() {
     await fetchAll();
   };
 
-  /** Remove a deposit AND decrement the goal's current_amount. */
   const deleteDeposit = async (depositId: string) => {
     const deposit = deposits.find((d) => d.id === depositId);
     if (!deposit) throw new Error("Depósito não encontrado");
@@ -162,7 +170,6 @@ export function useGoals() {
     await fetchAll();
   };
 
-  /** Deposits grouped by goal_id, ordered by newest first (via server order). */
   const depositsByGoal: Record<string, GoalDeposit[]> = useMemo(() => {
     const map: Record<string, GoalDeposit[]> = {};
     for (const d of deposits) {

@@ -14,6 +14,7 @@ import { GalleryPage } from "@/pages/gallery";
 import { GalleryAlbumPage } from "@/pages/gallery-album";
 import { LettersPage } from "@/pages/letters";
 import { HomePage } from "@/pages/home";
+import { SettingsPage } from "@/pages/settings";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -64,6 +65,7 @@ export function App() {
                 <Route path="/letters" element={<LettersPage />} />
                 <Route path="/expenses" element={<ExpensesPage />} />
                 <Route path="/goals" element={<GoalsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/finance" element={<Navigate to="/expenses" replace />} />
               </Routes>
             </AppLayout>

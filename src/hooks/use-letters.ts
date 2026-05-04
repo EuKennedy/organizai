@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useCouple } from "@/hooks/use-couple";
+import { useRealtimeRefetch } from "@/hooks/use-realtime";
 import type { Letter, LetterMood } from "@/types";
 
 export function useLetters() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [letters, setLetters] = useState<Letter[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetch = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -18,7 +21,6 @@ export function useLetters() {
       const { data } = await supabase
         .from("letters")
         .select("*")
-        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       setLetters((data as Letter[] | null) ?? []);
     } catch (err) {
@@ -26,11 +28,13 @@ export function useLetters() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetch();
   }, [fetch]);
+
+  useRealtimeRefetch(couple?.id ?? null, ["letters"], fetch);
 
   const createLetter = useCallback(
     async (input: {
@@ -40,9 +44,11 @@ export function useLetters() {
       recipient?: string | null;
       mood?: LetterMood;
     }): Promise<Letter> => {
-      if (!user) throw new Error("Não autenticado");
+      if (!user || !couple) throw new Error("Não autenticado");
       const payload = {
         user_id: user.id,
+        couple_id: couple.id,
+        created_by: user.id,
         title: input.title.trim(),
         body: input.body,
         author: input.author?.trim() || null,
@@ -59,7 +65,7 @@ export function useLetters() {
       setLetters((prev) => [row, ...prev]);
       return row;
     },
-    [user]
+    [user, couple]
   );
 
   const updateLetter = useCallback(

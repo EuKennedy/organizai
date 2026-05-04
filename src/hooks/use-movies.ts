@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useCouple } from "@/hooks/use-couple";
+import { useRealtimeRefetch } from "@/hooks/use-realtime";
 import type { Movie } from "@/types";
 
 export function useMovies() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMovies = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -18,7 +21,6 @@ export function useMovies() {
       const { data } = await supabase
         .from("movies")
         .select("*")
-        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       setMovies((data as Movie[] | null) ?? []);
     } catch (err) {
@@ -26,15 +28,19 @@ export function useMovies() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetchMovies();
   }, [fetchMovies]);
 
+  useRealtimeRefetch(couple?.id ?? null, ["movies"], fetchMovies);
+
   const addMovie = async (movie: Omit<Movie, "id" | "user_id" | "created_at" | "updated_at">) => {
-    if (!user) return;
-    const { error } = await supabase.from("movies").insert({ ...movie, user_id: user.id });
+    if (!user || !couple) return;
+    const { error } = await supabase
+      .from("movies")
+      .insert({ ...movie, user_id: user.id, couple_id: couple.id, created_by: user.id });
     if (error) throw new Error(error.message);
     await fetchMovies();
   };

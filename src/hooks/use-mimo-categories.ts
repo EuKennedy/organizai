@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useCouple } from "@/hooks/use-couple";
+import { useRealtimeRefetch } from "@/hooks/use-realtime";
 import {
   DEFAULT_MIMO_CATEGORIES,
   DEFAULT_MIMO_CATEGORY_MAP,
@@ -10,17 +12,14 @@ import {
   type MimoCustomCategoryRow,
 } from "@/types";
 
-/**
- * Combines built-in default categories with user-created custom categories.
- * Customs are stored in `public.mimo_categories` with RLS.
- */
 export function useMimoCategories() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [customs, setCustoms] = useState<MimoCustomCategoryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchCustoms = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -29,7 +28,6 @@ export function useMimoCategories() {
       const { data } = await supabase
         .from("mimo_categories")
         .select("*")
-        .eq("user_id", user.id)
         .order("created_at", { ascending: true });
       setCustoms((data as MimoCustomCategoryRow[] | null) ?? []);
     } catch (err) {
@@ -37,11 +35,13 @@ export function useMimoCategories() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetchCustoms();
   }, [fetchCustoms]);
+
+  useRealtimeRefetch(couple?.id ?? null, ["mimo_categories"], fetchCustoms);
 
   const categories: MimoCategoryDef[] = useMemo(() => {
     return [
@@ -70,7 +70,7 @@ export function useMimoCategories() {
 
   const createCategory = useCallback(
     async (label: string, emoji: string): Promise<MimoCategoryDef> => {
-      if (!user) throw new Error("Not authenticated");
+      if (!user || !couple) throw new Error("Not authenticated");
       const cleanLabel = label.trim();
       const cleanEmoji = emoji.trim() || "✨";
       if (!cleanLabel) throw new Error("Nome da categoria é obrigatório");
@@ -78,7 +78,6 @@ export function useMimoCategories() {
       let base = slugifyCategory(cleanLabel);
       if (!base) base = `cat_${Date.now().toString(36)}`;
 
-      // Ensure uniqueness against defaults + existing customs
       const taken = new Set<string>([
         ...DEFAULT_MIMO_CATEGORIES.map((c) => c.value),
         ...customs.map((c) => c.value),
@@ -91,7 +90,14 @@ export function useMimoCategories() {
 
       const { data, error } = await supabase
         .from("mimo_categories")
-        .insert({ user_id: user.id, value, label: cleanLabel, emoji: cleanEmoji })
+        .insert({
+          user_id: user.id,
+          couple_id: couple.id,
+          created_by: user.id,
+          value,
+          label: cleanLabel,
+          emoji: cleanEmoji,
+        })
         .select()
         .single();
       if (error) throw new Error(error.message);
@@ -100,7 +106,7 @@ export function useMimoCategories() {
       setCustoms((prev) => [...prev, row]);
       return { value: row.value, label: row.label, emoji: row.emoji, custom: true };
     },
-    [user, customs]
+    [user, couple, customs]
   );
 
   return {

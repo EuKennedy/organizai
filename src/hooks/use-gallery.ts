@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useCouple } from "@/hooks/use-couple";
+import { useRealtimeRefetch } from "@/hooks/use-realtime";
 import {
   uploadGalleryPhoto,
   deleteGalleryPhotoStorage,
@@ -13,12 +15,13 @@ import type {
 
 export function useGallery() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [albums, setAlbums] = useState<GalleryAlbum[]>([]);
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -28,13 +31,11 @@ export function useGallery() {
         supabase
           .from("gallery_albums")
           .select("*")
-          .eq("user_id", user.id)
           .order("sort_order", { ascending: true })
           .order("created_at", { ascending: false }),
         supabase
           .from("gallery_photos")
           .select("*")
-          .eq("user_id", user.id)
           .order("sort_order", { ascending: true })
           .order("created_at", { ascending: true }),
       ]);
@@ -45,11 +46,17 @@ export function useGallery() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  useRealtimeRefetch(
+    couple?.id ?? null,
+    ["gallery_albums", "gallery_photos"],
+    fetchAll
+  );
 
   const photosByAlbum: Record<string, GalleryPhoto[]> = useMemo(() => {
     const map: Record<string, GalleryPhoto[]> = {};
@@ -77,13 +84,15 @@ export function useGallery() {
       description?: string | null;
       layout?: GalleryLayout;
     }): Promise<GalleryAlbum> => {
-      if (!user) throw new Error("Não autenticado");
+      if (!user || !couple) throw new Error("Não autenticado");
       // Place new album at the top (lowest sort_order - 1)
       const minOrder = albums.length > 0
         ? Math.min(...albums.map((a) => a.sort_order ?? 0))
         : 0;
       const payload = {
         user_id: user.id,
+        couple_id: couple.id,
+        created_by: user.id,
         name: input.name.trim(),
         description: input.description?.trim() || null,
         layout: input.layout ?? "masonry",
@@ -99,7 +108,7 @@ export function useGallery() {
       setAlbums((prev) => [row, ...prev]);
       return row;
     },
-    [user, albums]
+    [user, couple, albums]
   );
 
   /**
@@ -109,7 +118,7 @@ export function useGallery() {
    */
   const reorderAlbums = useCallback(
     async (orderedIds: string[]) => {
-      if (!user) throw new Error("Não autenticado");
+      if (!user || !couple) throw new Error("Não autenticado");
 
       // Optimistic local reorder
       setAlbums((prev) => {
@@ -141,7 +150,7 @@ export function useGallery() {
         throw new Error(failed.error.message);
       }
     },
-    [user, fetchAll]
+    [user, couple, fetchAll]
   );
 
   const updateAlbum = useCallback(
@@ -177,7 +186,7 @@ export function useGallery() {
       files: File[],
       onProgress?: (done: number, total: number) => void
     ): Promise<GalleryPhoto[]> => {
-      if (!user) throw new Error("Não autenticado");
+      if (!user || !couple) throw new Error("Não autenticado");
       const existing = photosByAlbum[albumId] ?? [];
       let nextOrder = existing.length;
       const inserted: GalleryPhoto[] = [];
@@ -191,6 +200,8 @@ export function useGallery() {
           );
           const payload = {
             user_id: user.id,
+            couple_id: couple.id,
+            created_by: user.id,
             album_id: albumId,
             storage_path,
             public_url,
@@ -218,7 +229,7 @@ export function useGallery() {
       }
       return inserted;
     },
-    [user, photosByAlbum]
+    [user, couple, photosByAlbum]
   );
 
   const deletePhoto = useCallback(

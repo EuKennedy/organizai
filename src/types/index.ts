@@ -346,3 +346,33 @@ export const BABY_GENDERS: { value: BabyGender; label: string; emoji: string }[]
   { value: "menina", label: "Menina", emoji: "👧" },
   { value: "unissex", label: "Unissex", emoji: "🤍" },
 ];
+
+// =============================================================================
+// COUPLE (shared workspace)
+// =============================================================================
+
+export interface Couple {
+  id: string;
+  name: string;
+  start_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoupleMember {
+  couple_id: string;
+  user_id: string;
+  display_name: string | null;
+  avatar_color: string | null;
+  joined_at: string;
+}
+
+export interface CoupleInvite {
+  code: string;
+  couple_id: string;
+  created_by: string;
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
+  created_at: string;
+}

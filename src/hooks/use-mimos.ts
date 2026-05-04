@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useCouple } from "@/hooks/use-couple";
+import { useRealtimeRefetch } from "@/hooks/use-realtime";
 import type { Mimo } from "@/types";
 
 export function useMimos() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [mimos, setMimos] = useState<Mimo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMimos = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -18,7 +21,6 @@ export function useMimos() {
       const { data } = await supabase
         .from("mimos")
         .select("*")
-        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       setMimos((data as Mimo[] | null) ?? []);
     } catch (err) {
@@ -26,15 +28,19 @@ export function useMimos() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetchMimos();
   }, [fetchMimos]);
 
+  useRealtimeRefetch(couple?.id ?? null, ["mimos"], fetchMimos);
+
   const addMimo = async (m: Omit<Mimo, "id" | "user_id" | "created_at" | "updated_at">) => {
-    if (!user) return;
-    const { error } = await supabase.from("mimos").insert({ ...m, user_id: user.id });
+    if (!user || !couple) return;
+    const { error } = await supabase
+      .from("mimos")
+      .insert({ ...m, user_id: user.id, couple_id: couple.id, created_by: user.id });
     if (error) throw new Error(error.message);
     await fetchMimos();
   };

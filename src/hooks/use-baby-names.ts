@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useCouple } from "@/hooks/use-couple";
+import { useRealtimeRefetch } from "@/hooks/use-realtime";
 import type { BabyName } from "@/types";
 
 export function useBabyNames() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [names, setNames] = useState<BabyName[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchNames = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -18,7 +21,6 @@ export function useBabyNames() {
       const { data } = await supabase
         .from("baby_names")
         .select("*")
-        .eq("user_id", user.id)
         .order("favorite", { ascending: false })
         .order("created_at", { ascending: false });
       setNames((data as BabyName[] | null) ?? []);
@@ -27,19 +29,21 @@ export function useBabyNames() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetchNames();
   }, [fetchNames]);
 
+  useRealtimeRefetch(couple?.id ?? null, ["baby_names"], fetchNames);
+
   const addName = async (
     input: Omit<BabyName, "id" | "user_id" | "created_at">
   ) => {
-    if (!user) return;
+    if (!user || !couple) return;
     const { error } = await supabase
       .from("baby_names")
-      .insert({ ...input, user_id: user.id });
+      .insert({ ...input, user_id: user.id, couple_id: couple.id, created_by: user.id });
     if (error) throw new Error(error.message);
     await fetchNames();
   };

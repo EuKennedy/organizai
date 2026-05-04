@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useCouple } from "@/hooks/use-couple";
+import { useRealtimeRefetch } from "@/hooks/use-realtime";
 import {
   DEFAULT_WISHLIST_CATEGORIES,
   DEFAULT_WISHLIST_CATEGORY_MAP,
@@ -13,12 +15,13 @@ import {
 
 export function useWishlist() {
   const { user } = useAuth();
+  const { couple } = useCouple();
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [customs, setCustoms] = useState<WishlistCustomCategoryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    if (!user) {
+    if (!couple) {
       setLoading(false);
       return;
     }
@@ -28,12 +31,10 @@ export function useWishlist() {
         supabase
           .from("wishlist_items")
           .select("*")
-          .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("wishlist_categories")
           .select("*")
-          .eq("user_id", user.id)
           .order("created_at", { ascending: true }),
       ]);
       setItems((itemsRes.data as WishlistItem[] | null) ?? []);
@@ -43,11 +44,17 @@ export function useWishlist() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [couple]);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  useRealtimeRefetch(
+    couple?.id ?? null,
+    ["wishlist_items", "wishlist_categories"],
+    fetchAll
+  );
 
   const categories: WishlistCategoryDef[] = useMemo(
     () => [
@@ -63,16 +70,9 @@ export function useWishlist() {
   );
 
   const categoryMap: Record<string, WishlistCategoryDef> = useMemo(() => {
-    const map: Record<string, WishlistCategoryDef> = {
-      ...DEFAULT_WISHLIST_CATEGORY_MAP,
-    };
+    const map: Record<string, WishlistCategoryDef> = { ...DEFAULT_WISHLIST_CATEGORY_MAP };
     for (const c of customs) {
-      map[c.value] = {
-        value: c.value,
-        label: c.label,
-        emoji: c.emoji,
-        custom: true,
-      };
+      map[c.value] = { value: c.value, label: c.label, emoji: c.emoji, custom: true };
     }
     return map;
   }, [customs]);
@@ -86,10 +86,10 @@ export function useWishlist() {
   const addItem = async (
     input: Omit<WishlistItem, "id" | "user_id" | "created_at" | "updated_at">
   ) => {
-    if (!user) return;
+    if (!user || !couple) return;
     const { error } = await supabase
       .from("wishlist_items")
-      .insert({ ...input, user_id: user.id });
+      .insert({ ...input, user_id: user.id, couple_id: couple.id, created_by: user.id });
     if (error) throw new Error(error.message);
     await fetchAll();
   };
@@ -113,7 +113,7 @@ export function useWishlist() {
     label: string,
     emoji: string
   ): Promise<WishlistCategoryDef> => {
-    if (!user) throw new Error("Não autenticado");
+    if (!user || !couple) throw new Error("Não autenticado");
     const cleanLabel = label.trim();
     const cleanEmoji = emoji.trim() || "🛒";
     if (!cleanLabel) throw new Error("Nome da categoria é obrigatório");
@@ -131,7 +131,14 @@ export function useWishlist() {
 
     const { data, error } = await supabase
       .from("wishlist_categories")
-      .insert({ user_id: user.id, value, label: cleanLabel, emoji: cleanEmoji })
+      .insert({
+        user_id: user.id,
+        couple_id: couple.id,
+        created_by: user.id,
+        value,
+        label: cleanLabel,
+        emoji: cleanEmoji,
+      })
       .select()
       .single();
     if (error) throw new Error(error.message);
