@@ -72,6 +72,8 @@ export interface FinancialGoal {
   name: string;
   target_amount: number;
   current_amount: number;
+  deadline: string | null;
+  emoji: string | null;
   created_at: string;
   updated_at: string;
 }
