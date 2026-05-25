@@ -28,7 +28,7 @@ interface CoupleContextValue {
     updates: Partial<Pick<CoupleMember, "display_name" | "avatar_color">>
   ) => Promise<void>;
   /** Update couple name / start_date. */
-  updateCouple: (updates: Partial<Pick<Couple, "name" | "start_date" | "logo_url" | "accent_hue" | "iphone_partner_name" | "android_partner_name">>) => Promise<void>;
+  updateCouple: (updates: Partial<Pick<Couple, "name" | "start_date" | "logo_url" | "accent_hue" | "iphone_partner_name" | "android_partner_name" | "monthly_capacity">>) => Promise<void>;
 }
 
 const CoupleContext = createContext<CoupleContextValue | null>(null);
@@ -146,7 +146,7 @@ export function CoupleProvider({ children }: { children: ReactNode }) {
   );
 
   const updateCouple = useCallback(
-    async (updates: Partial<Pick<Couple, "name" | "start_date" | "logo_url" | "accent_hue" | "iphone_partner_name" | "android_partner_name">>) => {
+    async (updates: Partial<Pick<Couple, "name" | "start_date" | "logo_url" | "accent_hue" | "iphone_partner_name" | "android_partner_name" | "monthly_capacity">>) => {
       if (!couple) return;
       const { error } = await supabase
         .from("couples")

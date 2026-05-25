@@ -23,15 +23,18 @@ import {
   Flame,
   History,
   Loader2,
+  Pencil,
   Plus,
   Sparkles,
   Target,
   Trash2,
   TrendingUp,
   Trophy,
+  Wallet,
   Zap,
 } from "lucide-react";
 import { useGoals } from "@/hooks/use-finance";
+import { useCouple } from "@/hooks/use-couple";
 import { PageHero } from "@/components/page-hero";
 import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
@@ -66,6 +69,30 @@ const CONFETTI_COLORS = [
   "#60a5fa", "#a78bfa", "#f472b6", "#fb7185",
 ];
 
+type Term = "short" | "mid" | "long" | "none";
+type Tab = "all" | Term;
+
+const TERM_LABELS: Record<Tab, string> = {
+  all: "Tudo",
+  short: "Curto",
+  mid: "Médio",
+  long: "Longo",
+  none: "Sem prazo",
+};
+
+const TERM_HINTS: Record<Term, string> = {
+  short: "até 1 ano",
+  mid: "1 a 3 anos",
+  long: "3+ anos",
+  none: "sem deadline",
+};
+
+const PRIORITY_META = {
+  1: { label: "Baixa", color: "text-muted-foreground", bg: "bg-muted/40", ring: "ring-border" },
+  2: { label: "Média", color: "text-amber-400",        bg: "bg-amber-500/15", ring: "ring-amber-500/30" },
+  3: { label: "Alta",  color: "text-red-400",          bg: "bg-red-500/15",   ring: "ring-red-500/35" },
+} as const;
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 const brl = (v: number) =>
@@ -83,6 +110,14 @@ function pctStr(p: number): string {
   if (p <= 0) return "0%";
   if (p < 10) return `${p.toFixed(1).replace(".", ",")}%`;
   return `${Math.round(p)}%`;
+}
+
+function getTerm(goal: FinancialGoal, now = new Date()): Term {
+  if (!goal.deadline) return "none";
+  const months = differenceInMonths(new Date(goal.deadline), now);
+  if (months <= 12) return "short";
+  if (months <= 36) return "mid";
+  return "long";
 }
 
 interface Breakdown {
@@ -119,6 +154,52 @@ function getBreakdown(goal: FinancialGoal, now = new Date()): Breakdown | null {
     isOnTrack: Number(goal.current_amount) >= expectedByNow,
     isOverdue: daysLeft === 0 && remaining > 0,
   };
+}
+
+interface Allocation {
+  allocated: number;   // monthly amount actually allocated from capacity
+  ideal: number;       // what the goal needs per month to hit deadline
+  shortfall: number;   // ideal - allocated (≥ 0)
+}
+
+/**
+ * Smart allocator. Distributes monthly capacity across goals sorted by
+ * (priority DESC, deadline ASC). High priority + urgent gets fully funded
+ * first. Leftover trickles down to lower priority / longer term.
+ */
+function allocateCapacity(
+  goals: FinancialGoal[],
+  capacity: number | null,
+  now = new Date()
+): Map<string, Allocation> {
+  const map = new Map<string, Allocation>();
+  if (capacity === null || capacity <= 0) return map;
+  // Compute ideals
+  const items = goals
+    .filter((g) => Number(g.current_amount) < Number(g.target_amount))
+    .map((g) => ({ g, bd: getBreakdown(g, now) }))
+    .filter((it) => it.bd && it.bd.perMonth > 0);
+  // Sort: priority desc, then deadline asc (urgent first)
+  items.sort((a, b) => {
+    const pa = a.g.priority ?? 2;
+    const pb = b.g.priority ?? 2;
+    if (pa !== pb) return pb - pa;
+    const da = a.g.deadline ? new Date(a.g.deadline).getTime() : Infinity;
+    const db = b.g.deadline ? new Date(b.g.deadline).getTime() : Infinity;
+    return da - db;
+  });
+  let remaining = capacity;
+  for (const { g, bd } of items) {
+    const ideal = bd!.perMonth;
+    const allocated = Math.min(ideal, remaining);
+    map.set(g.id, {
+      allocated,
+      ideal,
+      shortfall: Math.max(0, ideal - allocated),
+    });
+    remaining = Math.max(0, remaining - allocated);
+  }
+  return map;
 }
 
 type MonthStatus = "complete" | "partial" | "missed" | "current" | "future";
@@ -191,8 +272,10 @@ interface QuickAmount {
   label: string;
 }
 
-function computeQuickAmounts(bd: Breakdown | null): QuickAmount[] {
-  if (!bd || bd.perDay <= 0) {
+function computeQuickAmounts(
+  effectivePerMonth: number
+): QuickAmount[] {
+  if (effectivePerMonth <= 0) {
     return [
       { amount: 10, label: "+R$10" },
       { amount: 50, label: "+R$50" },
@@ -200,9 +283,9 @@ function computeQuickAmounts(bd: Breakdown | null): QuickAmount[] {
     ];
   }
   return [
-    { amount: Math.max(1, Math.round(bd.perDay)), label: "hoje" },
-    { amount: Math.max(1, Math.round(bd.perWeek)), label: "semana" },
-    { amount: Math.max(1, Math.round(bd.perMonth)), label: "mês" },
+    { amount: Math.max(1, Math.round(effectivePerMonth / 30)), label: "hoje" },
+    { amount: Math.max(1, Math.round(effectivePerMonth / 4.33)), label: "semana" },
+    { amount: Math.max(1, Math.round(effectivePerMonth)), label: "mês" },
   ].filter((c) => c.amount >= 1);
 }
 
@@ -333,7 +416,6 @@ function ProgressRing({
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
-      {/* Outer glow when on track */}
       {onTrack && capped > 0 && capped < 100 && (
         <motion.div
           className={cn(
@@ -488,7 +570,6 @@ function MilestoneUnlockModal({
 }) {
   const reduced = useReducedMotion();
 
-  // Auto-dismiss after 6s
   useEffect(() => {
     const t = setTimeout(onClose, 6000);
     return () => clearTimeout(t);
@@ -546,46 +627,329 @@ function MilestoneUnlockModal({
   );
 }
 
-// ─── QuickDepositChips ────────────────────────────────────────────────────────
+// ─── PriorityBadge (inline cycle on click) ────────────────────────────────────
 
-function QuickDepositChips({
-  amounts,
-  onPick,
-  submitting,
+function PriorityBadge({
+  priority,
+  onCycle,
 }: {
-  amounts: QuickAmount[];
-  onPick: (amount: number) => void;
-  submitting: boolean;
+  priority: 1 | 2 | 3;
+  onCycle: (next: 1 | 2 | 3) => void;
 }) {
-  if (amounts.length === 0) return null;
+  const meta = PRIORITY_META[priority];
+  const next = ((priority % 3) + 1) as 1 | 2 | 3;
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <Zap className="h-3 w-3 text-emerald-500" />
-        <Label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Guardar rápido
-        </Label>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {amounts.map((a, i) => (
-          <motion.button
-            key={i}
-            type="button"
-            disabled={submitting}
-            onClick={() => onPick(a.amount)}
-            whileTap={{ scale: 0.93 }}
-            whileHover={{ scale: 1.03, y: -1 }}
-            transition={{ type: "spring", damping: 18, stiffness: 320 }}
-            className="group inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 px-3.5 py-2 text-xs font-semibold text-emerald-400 shadow-sm shadow-emerald-500/5 transition-colors hover:border-emerald-500/60 hover:from-emerald-500/20 hover:to-emerald-600/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus className="h-3 w-3 transition-transform group-hover:rotate-90" />
-            <span className="tabular">{brl(a.amount)}</span>
-            <span className="text-[10.5px] font-medium text-muted-foreground">
-              {a.label}
-            </span>
-          </motion.button>
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCycle(next);
+      }}
+      title={`Prioridade ${meta.label} — toque pra trocar`}
+      className={cn(
+        "inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all hover:scale-105",
+        meta.bg, meta.color, meta.ring
+      )}
+    >
+      <span className="leading-none">
+        {Array.from({ length: 3 }, (_, i) => (
+          <span key={i} className={cn("text-[8px]", i < priority ? "" : "opacity-25")}>●</span>
         ))}
+      </span>
+      {meta.label}
+    </button>
+  );
+}
+
+// ─── PriorityPicker (3 buttons for create dialog) ─────────────────────────────
+
+function PriorityPicker({
+  value,
+  onChange,
+}: {
+  value: 1 | 2 | 3;
+  onChange: (v: 1 | 2 | 3) => void;
+}) {
+  const options: { v: 1 | 2 | 3; label: string; activeClass: string }[] = [
+    { v: 1, label: "Baixa", activeClass: "bg-muted/60 border-foreground/30 text-foreground" },
+    { v: 2, label: "Média", activeClass: "bg-amber-500/15 border-amber-500/50 text-amber-400" },
+    { v: 3, label: "Alta",  activeClass: "bg-red-500/15 border-red-500/50 text-red-400" },
+  ];
+  return (
+    <div className="grid grid-cols-3 gap-1.5">
+      {options.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          onClick={() => onChange(o.v)}
+          className={cn(
+            "cursor-pointer rounded-xl border py-2 text-xs font-semibold transition-all",
+            value === o.v
+              ? o.activeClass + " scale-[1.02]"
+              : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+          )}
+        >
+          <span className="mr-1.5 inline-flex">
+            {Array.from({ length: 3 }, (_, i) => (
+              <span key={i} className={cn("text-[8px]", i < o.v ? "" : "opacity-25")}>●</span>
+            ))}
+          </span>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── MonthlyCapacityCard ──────────────────────────────────────────────────────
+
+function MonthlyCapacityCard({
+  capacity,
+  totalIdealCovered,
+  totalIdealNeed,
+  onSave,
+}: {
+  capacity: number | null;
+  totalIdealCovered: number;
+  totalIdealNeed: number;
+  onSave: (v: number | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(capacity?.toString() ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(capacity?.toString() ?? "");
+  }, [capacity, editing]);
+
+  const handleSave = async () => {
+    const v = parseFloat(draft.replace(",", "."));
+    setSaving(true);
+    try {
+      await onSave(isFinite(v) && v > 0 ? v : null);
+      setEditing(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Unset + not editing → CTA
+  if (capacity === null && !editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="group relative mb-6 flex w-full cursor-pointer items-center gap-4 overflow-hidden rounded-2xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/[0.04] via-card to-card p-5 text-left transition-all hover:border-primary/60 hover:bg-primary/[0.06]"
+      >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+          <Wallet className="h-5 w-5 text-primary" strokeWidth={1.75} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/70">
+            Capacidade mensal
+          </p>
+          <p className="mt-0.5 text-sm font-semibold tracking-tight">
+            Quanto vocês podem guardar por mês?
+          </p>
+          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+            Defina e o algoritmo distribui entre as metas pela prioridade.
+          </p>
+        </div>
+        <span className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground transition-transform group-hover:scale-105">
+          Definir
+        </span>
+      </button>
+    );
+  }
+
+  // Editing
+  if (editing) {
+    return (
+      <div className="mb-6 rounded-2xl border border-primary/30 bg-card p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <Wallet className="h-3.5 w-3.5 text-primary" />
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Capacidade mensal
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[180px] flex-1">
+            <Label className="text-[11px] text-muted-foreground">R$ por mês</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="1.500,00"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              autoFocus
+              className="mt-1 h-11 text-lg tabular"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              className="rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className={cn(btnPrimary, "px-5")}
+            >
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {saving ? "Salvando" : "Salvar"}
+            </button>
+          </div>
+        </div>
+        {capacity !== null && (
+          <button
+            onClick={async () => {
+              setSaving(true);
+              try { await onSave(null); setEditing(false); } finally { setSaving(false); }
+            }}
+            className="mt-3 text-[11px] text-muted-foreground/70 underline-offset-4 hover:text-red-500 hover:underline"
+          >
+            Remover capacidade definida
+          </button>
+        )}
       </div>
+    );
+  }
+
+  // Set state
+  const shortfall = Math.max(0, totalIdealNeed - capacity!);
+  const surplus = Math.max(0, capacity! - totalIdealNeed);
+  const allocated = totalIdealCovered;
+
+  return (
+    <div className="relative mb-6 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.05] via-card to-card p-5 sm:p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-3.5 w-3.5 text-primary" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Capacidade mensal
+            </p>
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-2">
+            <p className="text-3xl font-bold tabular tracking-tight sm:text-4xl">
+              {brlFull(capacity!)}
+            </p>
+            <span className="text-[12px] text-muted-foreground">/mês</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setEditing(true)}
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-background/50 px-3 py-1.5 text-[11px] font-semibold text-foreground/80 backdrop-blur-sm transition-colors hover:border-primary/40 hover:text-foreground"
+        >
+          <Pencil className="h-3 w-3" />
+          Editar
+        </button>
+      </div>
+
+      {/* Stats row */}
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-xl bg-card/60 px-3 py-2.5 ring-1 ring-border/60">
+          <p className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Alocado
+          </p>
+          <p className="mt-0.5 text-sm font-bold tabular text-primary">
+            {brlFull(allocated)}
+          </p>
+        </div>
+        <div className="rounded-xl bg-card/60 px-3 py-2.5 ring-1 ring-border/60">
+          <p className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Total ideal
+          </p>
+          <p className="mt-0.5 text-sm font-bold tabular">
+            {brlFull(totalIdealNeed)}
+          </p>
+        </div>
+        <div className={cn(
+          "rounded-xl px-3 py-2.5 ring-1",
+          shortfall > 0
+            ? "bg-red-500/8 ring-red-500/20"
+            : "bg-emerald-500/8 ring-emerald-500/20"
+        )}>
+          <p className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {shortfall > 0 ? "Falta" : "Sobra"}
+          </p>
+          <p className={cn(
+            "mt-0.5 text-sm font-bold tabular",
+            shortfall > 0 ? "text-red-400" : "text-emerald-500"
+          )}>
+            {brlFull(shortfall > 0 ? shortfall : surplus)}
+          </p>
+        </div>
+      </div>
+
+      {shortfall > 0 && (
+        <p className="mt-3 text-[11.5px] text-muted-foreground">
+          Sua capacidade cobre as metas{" "}
+          <span className="font-semibold text-red-400">prioritárias</span> primeiro.
+          Pra cobrir tudo, falta{" "}
+          <span className="font-semibold tabular text-foreground">{brl(shortfall)}/mês</span>.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── TermTabs ─────────────────────────────────────────────────────────────────
+
+function TermTabs({
+  selected,
+  onSelect,
+  counts,
+}: {
+  selected: Tab;
+  onSelect: (t: Tab) => void;
+  counts: Record<Tab, number>;
+}) {
+  const tabs: Tab[] = ["all", "short", "mid", "long", "none"];
+  return (
+    <div className="mb-4 flex gap-1 overflow-x-auto rounded-2xl bg-muted/30 p-1" style={{ scrollbarWidth: "none" }}>
+      {tabs.map((t) => {
+        const active = selected === t;
+        const count = counts[t];
+        if (t === "none" && count === 0) return null;
+        return (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onSelect(t)}
+            className={cn(
+              "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[12px] font-semibold transition-all",
+              active
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {TERM_LABELS[t]}
+            {count > 0 && (
+              <span
+                className={cn(
+                  "rounded-full px-1.5 text-[10px] font-bold tabular leading-[1.4]",
+                  active ? "bg-primary/15 text-primary" : "bg-muted/60 text-muted-foreground"
+                )}
+              >
+                {count}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -655,22 +1019,62 @@ function MonthChips({ chips }: { chips: MonthChip[] }) {
 
 // ─── BreakdownStrip ───────────────────────────────────────────────────────────
 
-function BreakdownStrip({ bd }: { bd: Breakdown }) {
+function BreakdownStrip({
+  bd,
+  effectivePerMonth,
+  hasCapacity,
+  shortfall,
+}: {
+  bd: Breakdown;
+  effectivePerMonth: number;
+  hasCapacity: boolean;
+  shortfall: number;
+}) {
+  const isSubfunded = hasCapacity && shortfall > 0 && effectivePerMonth > 0;
+  const isStarved = hasCapacity && effectivePerMonth === 0;
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl border border-border/60 bg-background/50 px-3.5 py-2.5">
-      {[
-        { label: "por mês", value: bd.perMonth },
-        { label: "por semana", value: bd.perWeek },
-        { label: "por dia", value: bd.perDay },
-      ].map(({ label, value }) => (
-        <div key={label} className="flex items-baseline gap-1">
-          <span className="text-[14px] font-semibold tabular text-foreground">
-            {brl(value)}
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl border bg-background/50 px-3.5 py-2.5",
+        isStarved
+          ? "border-red-500/25 bg-red-500/[0.04]"
+          : isSubfunded
+          ? "border-amber-500/25"
+          : "border-border/60"
+      )}
+    >
+      {isStarved ? (
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[12.5px] font-semibold text-red-400">
+            Sem capacidade alocada
           </span>
-          <span className="text-[10.5px] text-muted-foreground">{label}</span>
+          <span className="text-[10.5px] text-muted-foreground">
+            outras metas têm prioridade
+          </span>
         </div>
-      ))}
-      <div className="ml-auto">
+      ) : (
+        [
+          { label: "por mês", value: effectivePerMonth },
+          { label: "por semana", value: effectivePerMonth / 4.33 },
+          { label: "por dia", value: effectivePerMonth / 30 },
+        ].map(({ label, value }) => (
+          <div key={label} className="flex items-baseline gap-1">
+            <span className="text-[14px] font-semibold tabular text-foreground">
+              {brl(value)}
+            </span>
+            <span className="text-[10.5px] text-muted-foreground">{label}</span>
+          </div>
+        ))
+      )}
+      <div className="ml-auto flex items-center gap-1.5">
+        {isSubfunded && (
+          <span
+            className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-500 ring-1 ring-amber-500/20"
+            title={`Ideal seria ${brl(bd.perMonth)}/mês — falta ${brl(shortfall)}/mês`}
+          >
+            Sub: {brl(shortfall)}
+          </span>
+        )}
         {bd.isOverdue ? (
           <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-500 ring-1 ring-red-500/20">
             Prazo vencido
@@ -689,22 +1093,72 @@ function BreakdownStrip({ bd }: { bd: Breakdown }) {
   );
 }
 
+// ─── QuickDepositChips ────────────────────────────────────────────────────────
+
+function QuickDepositChips({
+  amounts,
+  onPick,
+  submitting,
+}: {
+  amounts: QuickAmount[];
+  onPick: (amount: number) => void;
+  submitting: boolean;
+}) {
+  if (amounts.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Zap className="h-3 w-3 text-emerald-500" />
+        <Label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Guardar rápido
+        </Label>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {amounts.map((a, i) => (
+          <motion.button
+            key={i}
+            type="button"
+            disabled={submitting}
+            onClick={() => onPick(a.amount)}
+            whileTap={{ scale: 0.93 }}
+            whileHover={{ scale: 1.03, y: -1 }}
+            transition={{ type: "spring", damping: 18, stiffness: 320 }}
+            className="group inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 px-3.5 py-2 text-xs font-semibold text-emerald-400 shadow-sm shadow-emerald-500/5 transition-colors hover:border-emerald-500/60 hover:from-emerald-500/20 hover:to-emerald-600/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-3 w-3 transition-transform group-hover:rotate-90" />
+            <span className="tabular">{brl(a.amount)}</span>
+            <span className="text-[10.5px] font-medium text-muted-foreground">
+              {a.label}
+            </span>
+          </motion.button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── GoalCard ─────────────────────────────────────────────────────────────────
 
 function GoalCard({
   goal,
   deposits,
+  allocation,
+  hasCapacity,
   expanded,
   onToggle,
   onDeposit,
+  onUpdatePriority,
   onRemoveDeposit,
   onDelete,
 }: {
   goal: FinancialGoal;
   deposits: GoalDeposit[];
+  allocation: Allocation | null;
+  hasCapacity: boolean;
   expanded: boolean;
   onToggle: () => void;
   onDeposit: (goalId: string, amount: number) => Promise<void>;
+  onUpdatePriority: (goalId: string, priority: 1 | 2 | 3) => Promise<void>;
   onRemoveDeposit: (depositId: string) => Promise<void>;
   onDelete: (goalId: string) => Promise<void>;
 }) {
@@ -728,6 +1182,7 @@ function GoalCard({
     Number(goal.target_amount) - Number(goal.current_amount),
     0
   );
+  const priority = ((goal.priority ?? 2) as 1 | 2 | 3);
 
   const bd = useMemo(() => getBreakdown(goal), [goal]);
   const checklist = useMemo(
@@ -735,7 +1190,17 @@ function GoalCard({
     [goal, deposits]
   );
   const streak = useMemo(() => computeStreak(deposits), [deposits]);
-  const quickAmounts = useMemo(() => computeQuickAmounts(bd), [bd]);
+
+  // Effective monthly amount (allocated if capacity set, else ideal)
+  const effectivePerMonth = hasCapacity
+    ? (allocation?.allocated ?? 0)
+    : (bd?.perMonth ?? 0);
+  const shortfall = allocation?.shortfall ?? 0;
+
+  const quickAmounts = useMemo(
+    () => computeQuickAmounts(effectivePerMonth),
+    [effectivePerMonth]
+  );
 
   const handleDeposit = async (presetAmount?: number) => {
     const amount = presetAmount ?? parseFloat(draftAmt);
@@ -757,7 +1222,6 @@ function GoalCard({
         toast.success(`+${brlFull(amount)} guardado`, {
           description: `${highest.emoji} ${highest.msg}`,
         });
-        // Slight delay so user sees the deposit animation first
         setTimeout(() => setUnlockModal(highest), 400);
       } else {
         toast.success(`+${brlFull(amount)} guardado`);
@@ -766,6 +1230,14 @@ function GoalCard({
       toast.error(err instanceof Error ? err.message : "Erro ao depositar");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCyclePriority = async (next: 1 | 2 | 3) => {
+    try {
+      await onUpdatePriority(goal.id, next);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro");
     }
   };
 
@@ -784,7 +1256,6 @@ function GoalCard({
         bd?.isOnTrack && !isComplete && "shadow-md shadow-primary/[0.06]"
       )}
     >
-      {/* CONFETTI overlay on top of the whole card */}
       <Confetti burst={burst} />
 
       {/* HEADER */}
@@ -811,6 +1282,7 @@ function GoalCard({
               <h3 className="text-[15px] font-semibold tracking-tight">
                 {goal.name}
               </h3>
+              <PriorityBadge priority={priority} onCycle={handleCyclePriority} />
               {isComplete && (
                 <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-500 ring-1 ring-emerald-500/20">
                   Concluída 🏆
@@ -854,15 +1326,19 @@ function GoalCard({
           </div>
         </div>
 
-        {/* breakdown strip — always visible when deadline set */}
         {bd && !isComplete && (
           <div className="mt-3">
-            <BreakdownStrip bd={bd} />
+            <BreakdownStrip
+              bd={bd}
+              effectivePerMonth={effectivePerMonth}
+              hasCapacity={hasCapacity}
+              shortfall={shortfall}
+            />
           </div>
         )}
       </button>
 
-      {/* EXPANDED SECTION */}
+      {/* EXPANDED */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -874,8 +1350,7 @@ function GoalCard({
           >
             <div className="space-y-5 border-t border-border bg-background/30 px-4 py-4 sm:px-5 sm:py-5">
 
-              {/* QUICK DEPOSIT CHIPS — top, primary action */}
-              {!isComplete && (
+              {!isComplete && effectivePerMonth > 0 && (
                 <QuickDepositChips
                   amounts={quickAmounts}
                   onPick={handleDeposit}
@@ -883,7 +1358,6 @@ function GoalCard({
                 />
               )}
 
-              {/* MONTHLY CHECKLIST */}
               {checklist && (
                 <div className="space-y-1.5">
                   <button
@@ -920,7 +1394,6 @@ function GoalCard({
                 </div>
               )}
 
-              {/* CUSTOM AMOUNT INPUT */}
               {!isComplete && (
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -964,14 +1437,13 @@ function GoalCard({
                     pra bater a meta.
                     {bd && bd.perMonth > 0 && (
                       <span className="ml-1 text-primary/80">
-                        ({brlShortFmt(bd.perMonth)}/mês sugerido)
+                        (ideal {brlShortFmt(bd.perMonth)}/mês)
                       </span>
                     )}
                   </p>
                 </div>
               )}
 
-              {/* DEPOSIT HISTORY */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -1038,7 +1510,6 @@ function GoalCard({
                 )}
               </div>
 
-              {/* DELETE */}
               <div className="flex justify-end pt-1">
                 <button
                   onClick={() => onDelete(goal.id)}
@@ -1053,7 +1524,6 @@ function GoalCard({
         )}
       </AnimatePresence>
 
-      {/* UNLOCK MODAL */}
       <AnimatePresence>
         {unlockModal && (
           <MilestoneUnlockModal
@@ -1076,6 +1546,7 @@ interface CreateGoalData {
   emoji: string | null;
   targetAmount: number;
   deadline: string | null;
+  priority: 1 | 2 | 3;
 }
 
 function CreateGoalDialog({
@@ -1093,6 +1564,7 @@ function CreateGoalDialog({
   const [mode, setMode] = useState<DeadlineMode>("months");
   const [deadlineN, setDeadlineN] = useState("12");
   const [deadlineDate, setDeadlineDate] = useState("");
+  const [priority, setPriority] = useState<1 | 2 | 3>(2);
   const [submitting, setSubmitting] = useState(false);
 
   const computeDeadline = (): string | null => {
@@ -1135,6 +1607,7 @@ function CreateGoalDialog({
         emoji: selectedEmoji,
         targetAmount: parseFloat(targetAmt),
         deadline: computeDeadline(),
+        priority,
       });
       setName("");
       setSelectedEmoji(null);
@@ -1142,6 +1615,7 @@ function CreateGoalDialog({
       setMode("months");
       setDeadlineN("12");
       setDeadlineDate("");
+      setPriority(2);
       onClose();
     } finally {
       setSubmitting(false);
@@ -1162,7 +1636,6 @@ function CreateGoalDialog({
         </DialogHeader>
 
         <div className="space-y-5 pt-2">
-          {/* Emoji picker */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">
               Ícone (opcional)
@@ -1188,7 +1661,6 @@ function CreateGoalDialog({
             </div>
           </div>
 
-          {/* Name */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
               Nome da meta
@@ -1201,7 +1673,6 @@ function CreateGoalDialog({
             />
           </div>
 
-          {/* Target amount */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
               Valor alvo (R$)
@@ -1217,7 +1688,14 @@ function CreateGoalDialog({
             />
           </div>
 
-          {/* Deadline */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Prioridade</Label>
+            <PriorityPicker value={priority} onChange={setPriority} />
+            <p className="text-[10.5px] text-muted-foreground/80">
+              Alta = come primeiro da capacidade mensal. Baixa = pega o que sobrar.
+            </p>
+          </div>
+
           <div className="space-y-2.5">
             <Label className="text-xs text-muted-foreground">
               Prazo para juntar
@@ -1280,7 +1758,6 @@ function CreateGoalDialog({
             )}
           </div>
 
-          {/* Live preview */}
           <AnimatePresence>
             {preview && (
               <motion.div
@@ -1343,12 +1820,52 @@ function CreateGoalDialog({
 // ─── GoalsPage ────────────────────────────────────────────────────────────────
 
 export function GoalsPage() {
-  const { goals, depositsByGoal, loading, addGoal, deleteGoal, addDeposit, deleteDeposit } =
-    useGoals();
+  const {
+    goals, depositsByGoal, loading,
+    addGoal, updateGoal, deleteGoal, addDeposit, deleteDeposit,
+  } = useGoals();
+  const { couple, updateCouple } = useCouple();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = useState<Tab>("all");
 
+  const capacity = couple?.monthly_capacity ?? null;
+  const hasCapacity = capacity !== null && capacity > 0;
+
+  // Compute allocation map across ALL goals (capacity-aware)
+  const allocations = useMemo(
+    () => allocateCapacity(goals, capacity),
+    [goals, capacity]
+  );
+
+  // Total ideal need per month (across all incomplete goals with deadline)
+  const totalIdealNeed = useMemo(() => {
+    return goals.reduce((sum, g) => {
+      const bd = getBreakdown(g);
+      return sum + (bd?.perMonth ?? 0);
+    }, 0);
+  }, [goals]);
+
+  const totalAllocated = useMemo(() => {
+    let sum = 0;
+    allocations.forEach((a) => { sum += a.allocated; });
+    return sum;
+  }, [allocations]);
+
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    const counts: Record<Tab, number> = { all: goals.length, short: 0, mid: 0, long: 0, none: 0 };
+    for (const g of goals) counts[getTerm(g)]++;
+    return counts;
+  }, [goals]);
+
+  const filteredGoals = useMemo(() => {
+    if (selectedTab === "all") return goals;
+    return goals.filter((g) => getTerm(g) === selectedTab);
+  }, [goals, selectedTab]);
+
+  // Totals (across all goals, not filtered)
   const totalTarget = goals.reduce((s, g) => s + Number(g.target_amount), 0);
   const totalSaved = goals.reduce((s, g) => s + Number(g.current_amount), 0);
   const totalPct =
@@ -1358,7 +1875,6 @@ export function GoalsPage() {
   ).length;
   const onTrackCount = goals.filter((g) => getBreakdown(g)?.isOnTrack).length;
 
-  // Global streak across ALL deposits
   const globalStreak = useMemo(() => {
     const allDeposits = Object.values(depositsByGoal).flat();
     return computeStreak(allDeposits);
@@ -1371,6 +1887,7 @@ export function GoalsPage() {
       name: data.name,
       emoji: data.emoji ?? null,
       deadline: data.deadline ?? null,
+      priority: data.priority,
       target_amount: data.targetAmount,
       current_amount: 0,
     });
@@ -1396,6 +1913,15 @@ export function GoalsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao remover");
     }
+  };
+
+  const handleUpdatePriority = async (goalId: string, priority: 1 | 2 | 3) => {
+    await updateGoal(goalId, { priority });
+  };
+
+  const handleSaveCapacity = async (v: number | null) => {
+    await updateCouple({ monthly_capacity: v });
+    toast.success(v === null ? "Capacidade removida" : `Capacidade: ${brlFull(v)}/mês`);
   };
 
   return (
@@ -1426,6 +1952,16 @@ export function GoalsPage() {
           </button>
         }
       />
+
+      {/* CAPACITY CARD */}
+      {(goals.length > 0 || hasCapacity) && (
+        <MonthlyCapacityCard
+          capacity={capacity}
+          totalIdealCovered={totalAllocated}
+          totalIdealNeed={totalIdealNeed}
+          onSave={handleSaveCapacity}
+        />
+      )}
 
       {/* OVERVIEW */}
       {goals.length > 0 && (
@@ -1478,7 +2014,6 @@ export function GoalsPage() {
         </div>
       )}
 
-      {/* EMPTY */}
       {!loading && goals.length === 0 && (
         <EmptyState
           icon={Target}
@@ -1494,20 +2029,53 @@ export function GoalsPage() {
         />
       )}
 
+      {/* TABS */}
+      {goals.length > 1 && (
+        <TermTabs
+          selected={selectedTab}
+          onSelect={setSelectedTab}
+          counts={tabCounts}
+        />
+      )}
+
+      {/* Tab description */}
+      {selectedTab !== "all" && filteredGoals.length > 0 && (
+        <p className="mb-4 text-[11.5px] text-muted-foreground">
+          <span className="font-semibold text-foreground">{TERM_LABELS[selectedTab]}</span>{" "}
+          {selectedTab !== "none" && `· ${TERM_HINTS[selectedTab as Term]}`}{" "}
+          · {filteredGoals.length} meta{filteredGoals.length > 1 ? "s" : ""}
+        </p>
+      )}
+
+      {/* Empty for current tab */}
+      {goals.length > 0 && filteredGoals.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-border/60 bg-card/30 px-5 py-10 text-center">
+          <p className="text-sm font-medium text-muted-foreground">
+            Nenhuma meta de {TERM_LABELS[selectedTab].toLowerCase()}
+          </p>
+          <p className="mt-1 text-[12px] text-muted-foreground/70">
+            Mude a aba ou crie uma nova.
+          </p>
+        </div>
+      )}
+
       {/* GOALS LIST */}
-      {goals.length > 0 && (
+      {filteredGoals.length > 0 && (
         <div className="space-y-3">
           <AnimatePresence mode="popLayout">
-            {goals.map((g) => (
+            {filteredGoals.map((g) => (
               <GoalCard
                 key={g.id}
                 goal={g}
                 deposits={depositsByGoal[g.id] ?? []}
+                allocation={allocations.get(g.id) ?? null}
+                hasCapacity={hasCapacity}
                 expanded={expandedId === g.id}
                 onToggle={() =>
                   setExpandedId((prev) => (prev === g.id ? null : g.id))
                 }
                 onDeposit={addDeposit}
+                onUpdatePriority={handleUpdatePriority}
                 onRemoveDeposit={handleRemoveDeposit}
                 onDelete={handleDelete}
               />

@@ -74,6 +74,8 @@ export interface FinancialGoal {
   current_amount: number;
   deadline: string | null;
   emoji: string | null;
+  /** 1=baixa, 2=média (default), 3=alta. Drives smart allocation. */
+  priority: number;
   created_at: string;
   updated_at: string;
 }
@@ -366,6 +368,8 @@ export interface Couple {
   iphone_partner_name: string | null;
   /** Nome da pessoa que usa o Android — usado em push notifications. */
   android_partner_name: string | null;
+  /** Quanto o casal pode guardar por mês. Habilita o smart allocator. */
+  monthly_capacity: number | null;
   created_at: string;
   updated_at: string;
 }
