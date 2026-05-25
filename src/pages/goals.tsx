@@ -1,7 +1,13 @@
-import { useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  motion,
+  AnimatePresence,
+  animate,
+  useReducedMotion,
+} from "framer-motion";
 import { toast } from "sonner";
 import {
+  addDays,
   addMonths,
   differenceInDays,
   differenceInMonths,
@@ -14,9 +20,11 @@ import { ptBR } from "date-fns/locale";
 import {
   ChevronDown,
   ChevronUp,
+  Flame,
   History,
   Loader2,
   Plus,
+  Sparkles,
   Target,
   Trash2,
   TrendingUp,
@@ -52,6 +60,11 @@ const MILESTONES = [
   { pct: 75,  emoji: "🔥", msg: "Quase lá, não parem agora!" },
   { pct: 100, emoji: "🏆", msg: "Meta conquistada!" },
 ] as const;
+
+const CONFETTI_COLORS = [
+  "#f97316", "#facc15", "#a3e635", "#34d399",
+  "#60a5fa", "#a78bfa", "#f472b6", "#fb7185",
+];
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -158,6 +171,138 @@ function getCrossed(prev: number, next: number) {
   return MILESTONES.filter((m) => prev < m.pct && next >= m.pct);
 }
 
+function computeStreak(deposits: GoalDeposit[], now = new Date()): number {
+  if (deposits.length === 0) return 0;
+  const days = new Set<string>(deposits.map((d) => d.created_at.slice(0, 10)));
+  const todayStr = format(now, "yyyy-MM-dd");
+  const yesterdayStr = format(addDays(now, -1), "yyyy-MM-dd");
+  if (!days.has(todayStr) && !days.has(yesterdayStr)) return 0;
+  let cursor = days.has(todayStr) ? new Date(now) : addDays(now, -1);
+  let count = 0;
+  while (days.has(format(cursor, "yyyy-MM-dd"))) {
+    count++;
+    cursor = addDays(cursor, -1);
+  }
+  return count;
+}
+
+interface QuickAmount {
+  amount: number;
+  label: string;
+}
+
+function computeQuickAmounts(bd: Breakdown | null): QuickAmount[] {
+  if (!bd || bd.perDay <= 0) {
+    return [
+      { amount: 10, label: "+R$10" },
+      { amount: 50, label: "+R$50" },
+      { amount: 100, label: "+R$100" },
+    ];
+  }
+  return [
+    { amount: Math.max(1, Math.round(bd.perDay)), label: "hoje" },
+    { amount: Math.max(1, Math.round(bd.perWeek)), label: "semana" },
+    { amount: Math.max(1, Math.round(bd.perMonth)), label: "mês" },
+  ].filter((c) => c.amount >= 1);
+}
+
+// ─── CountUp ──────────────────────────────────────────────────────────────────
+
+function CountUp({
+  value,
+  format: fmt,
+  duration = 1.0,
+}: {
+  value: number;
+  format: (n: number) => string;
+  duration?: number;
+}) {
+  const [display, setDisplay] = useState(fmt(value));
+  const prev = useRef(value);
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    if (prev.current === value) {
+      setDisplay(fmt(value));
+      return;
+    }
+    if (reduced) {
+      prev.current = value;
+      setDisplay(fmt(value));
+      return;
+    }
+    const controls = animate(prev.current, value, {
+      duration,
+      ease: [0.2, 0.8, 0.2, 1],
+      onUpdate: (v) => setDisplay(fmt(v)),
+      onComplete: () => {
+        prev.current = value;
+        setDisplay(fmt(value));
+      },
+    });
+    return () => controls.stop();
+  }, [value, fmt, duration, reduced]);
+
+  return <>{display}</>;
+}
+
+// ─── Confetti ─────────────────────────────────────────────────────────────────
+
+function Confetti({
+  burst,
+  intensity = 18,
+}: {
+  burst: number;
+  intensity?: number;
+}) {
+  const reduced = useReducedMotion();
+  if (reduced) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <AnimatePresence>
+        {burst > 0 && (
+          <motion.div
+            key={burst}
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0"
+          >
+            {Array.from({ length: intensity }, (_, i) => {
+              const angle = (Math.PI * 2 * i) / intensity + (Math.random() - 0.5) * 0.5;
+              const distance = 70 + Math.random() * 90;
+              const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+              const isSquare = i % 3 === 0;
+              return (
+                <motion.div
+                  key={i}
+                  className={cn(
+                    "absolute left-1/2 top-1/2 h-1.5 w-1.5",
+                    isSquare ? "rounded-sm" : "rounded-full"
+                  )}
+                  style={{ backgroundColor: color }}
+                  initial={{ x: 0, y: 0, opacity: 1, scale: 0, rotate: 0 }}
+                  animate={{
+                    x: Math.cos(angle) * distance,
+                    y: Math.sin(angle) * distance + 80,
+                    opacity: [1, 1, 0],
+                    scale: [0, 1.3, 0.8],
+                    rotate: Math.random() * 360,
+                  }}
+                  transition={{
+                    duration: 1.4,
+                    delay: Math.random() * 0.15,
+                    ease: [0.2, 0.8, 0.4, 1],
+                  }}
+                />
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── ProgressRing ─────────────────────────────────────────────────────────────
 
 function ProgressRing({
@@ -165,11 +310,13 @@ function ProgressRing({
   emoji,
   size = 72,
   stroke = 5,
+  onTrack = false,
 }: {
   pct: number;
   emoji: string | null;
   size?: number;
   stroke?: number;
+  onTrack?: boolean;
 }) {
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
@@ -186,11 +333,25 @@ function ProgressRing({
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
+      {/* Outer glow when on track */}
+      {onTrack && capped > 0 && capped < 100 && (
+        <motion.div
+          className={cn(
+            "absolute inset-0 rounded-full blur-md",
+            colorClass
+          )}
+          style={{
+            background: "radial-gradient(circle, currentColor 0%, transparent 70%)",
+          }}
+          animate={{ opacity: [0.15, 0.35, 0.15] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
       <svg
         width={size}
         height={size}
         viewBox={`0 0 ${size} ${size}`}
-        className="-rotate-90"
+        className="relative -rotate-90"
         aria-hidden
       >
         <circle
@@ -230,31 +391,201 @@ function ProgressRing({
   );
 }
 
-// ─── MilestoneRow ──────────────────────────────────────────────────────────────
+// ─── StreakBadge ──────────────────────────────────────────────────────────────
+
+function StreakBadge({ streak }: { streak: number }) {
+  if (streak === 0) return null;
+  const tier =
+    streak >= 30 ? { fire: "🔥🔥🔥", color: "from-orange-500/25 to-red-500/25 ring-red-500/40 text-red-300" } :
+    streak >= 7  ? { fire: "🔥🔥",   color: "from-orange-500/20 to-amber-500/20 ring-orange-500/40 text-orange-300" } :
+                   { fire: "🔥",     color: "from-orange-500/15 to-amber-500/15 ring-orange-500/30 text-orange-400" };
+  return (
+    <motion.div
+      initial={{ scale: 0.7, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      whileHover={{ scale: 1.05 }}
+      transition={{ type: "spring", damping: 15, stiffness: 280 }}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full bg-gradient-to-r px-2.5 py-1 ring-1",
+        tier.color
+      )}
+    >
+      <motion.span
+        animate={{ rotate: [-4, 6, -4] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+        className="text-sm leading-none"
+      >
+        {tier.fire}
+      </motion.span>
+      <span className="text-[11px] font-bold tabular tracking-tight">
+        {streak} {streak === 1 ? "dia" : "dias"}
+      </span>
+    </motion.div>
+  );
+}
+
+// ─── MilestoneRow ─────────────────────────────────────────────────────────────
 
 function MilestoneRow({ pct }: { pct: number }) {
   return (
-    <div className="flex items-center gap-1">
-      {MILESTONES.map((m) => {
+    <div className="flex items-center gap-2">
+      {MILESTONES.map((m, idx) => {
         const reached = pct >= m.pct;
         return (
           <motion.div
             key={m.pct}
             initial={false}
-            animate={reached ? { scale: [1, 1.3, 1] } : { scale: 1 }}
-            transition={{ duration: 0.35 }}
+            animate={
+              reached
+                ? { scale: [0.9, 1.25, 1], rotate: [0, -8, 0] }
+                : { scale: 1 }
+            }
+            transition={{
+              duration: 0.5,
+              ease: [0.2, 0.8, 0.4, 1],
+              delay: reached ? idx * 0.05 : 0,
+            }}
             title={`${m.pct}% — ${m.msg}`}
             className={cn(
-              "flex h-6 w-6 items-center justify-center rounded-full text-[11px] transition-all",
+              "relative flex h-9 w-9 items-center justify-center rounded-full transition-all",
               reached
-                ? "bg-primary/12 ring-1 ring-primary/25"
-                : "bg-muted/40 opacity-35"
+                ? "bg-gradient-to-br from-primary/30 via-amber-500/20 to-orange-500/15 ring-2 ring-primary/50 shadow-lg shadow-primary/20"
+                : "bg-muted/30 ring-1 ring-border/40 opacity-40"
             )}
           >
-            {reached ? m.emoji : "·"}
+            {reached && (
+              <motion.span
+                className="absolute inset-0 rounded-full bg-primary/15"
+                animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+              />
+            )}
+            <span
+              className={cn(
+                "relative leading-none",
+                reached ? "text-base" : "text-[10px] font-bold text-muted-foreground/60"
+              )}
+            >
+              {reached ? m.emoji : `${m.pct}%`}
+            </span>
           </motion.div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── MilestoneUnlockModal ─────────────────────────────────────────────────────
+
+function MilestoneUnlockModal({
+  milestone,
+  goalName,
+  onClose,
+}: {
+  milestone: { pct: number; emoji: string; msg: string };
+  goalName: string;
+  onClose: () => void;
+}) {
+  const reduced = useReducedMotion();
+
+  // Auto-dismiss after 6s
+  useEffect(() => {
+    const t = setTimeout(onClose, 6000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-[100] flex cursor-pointer items-center justify-center bg-black/85 px-6 backdrop-blur-md"
+    >
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <Confetti burst={1} intensity={48} />
+      </div>
+      <motion.div
+        initial={{ scale: 0.5, opacity: 0, y: 30 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.7, opacity: 0 }}
+        transition={{ type: "spring", damping: 16, stiffness: 220 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-w-md text-center"
+      >
+        <motion.div
+          animate={
+            reduced
+              ? {}
+              : { rotate: [0, -8, 8, -4, 4, 0], y: [0, -8, 0, -4, 0] }
+          }
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+          className="mb-4 text-8xl leading-none"
+        >
+          {milestone.emoji}
+        </motion.div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">
+          {milestone.pct}% conquistado
+        </p>
+        <h2 className="mt-3 font-serif text-4xl italic leading-tight text-white">
+          {milestone.msg}
+        </h2>
+        <p className="mt-3 text-sm text-white/70">
+          Meta{" "}
+          <span className="font-semibold text-white">"{goalName}"</span>
+        </p>
+        <button
+          onClick={onClose}
+          className="mt-8 inline-flex cursor-pointer items-center gap-2 rounded-full bg-primary px-7 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:scale-105 hover:shadow-xl hover:shadow-primary/40"
+        >
+          Continuar
+          <Sparkles className="h-4 w-4" />
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─── QuickDepositChips ────────────────────────────────────────────────────────
+
+function QuickDepositChips({
+  amounts,
+  onPick,
+  submitting,
+}: {
+  amounts: QuickAmount[];
+  onPick: (amount: number) => void;
+  submitting: boolean;
+}) {
+  if (amounts.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Zap className="h-3 w-3 text-emerald-500" />
+        <Label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Guardar rápido
+        </Label>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {amounts.map((a, i) => (
+          <motion.button
+            key={i}
+            type="button"
+            disabled={submitting}
+            onClick={() => onPick(a.amount)}
+            whileTap={{ scale: 0.93 }}
+            whileHover={{ scale: 1.03, y: -1 }}
+            transition={{ type: "spring", damping: 18, stiffness: 320 }}
+            className="group inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 px-3.5 py-2 text-xs font-semibold text-emerald-400 shadow-sm shadow-emerald-500/5 transition-colors hover:border-emerald-500/60 hover:from-emerald-500/20 hover:to-emerald-600/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-3 w-3 transition-transform group-hover:rotate-90" />
+            <span className="tabular">{brl(a.amount)}</span>
+            <span className="text-[10.5px] font-medium text-muted-foreground">
+              {a.label}
+            </span>
+          </motion.button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -287,8 +618,7 @@ function MonthChips({ chips }: { chips: MonthChip[] }) {
             title={`${chip.label}: ${brlFull(chip.deposited)} / ${brlFull(chip.target)}`}
             className={cn(
               "flex shrink-0 flex-col items-center gap-0.5 rounded-xl px-2 py-2 ring-1 transition-colors",
-              chip.status === "complete" &&
-                "bg-emerald-500/10 ring-emerald-500/20",
+              chip.status === "complete" && "bg-emerald-500/10 ring-emerald-500/20",
               chip.status === "partial" && "bg-amber-500/10 ring-amber-500/20",
               chip.status === "missed" && "bg-red-500/8 ring-red-500/15",
               chip.status === "current" && "bg-primary/10 ring-primary/30",
@@ -380,7 +710,10 @@ function GoalCard({
 }) {
   const [draftAmt, setDraftAmt] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [celebrating, setCelebrating] = useState(false);
+  const [burst, setBurst] = useState(0);
+  const [unlockModal, setUnlockModal] = useState<
+    (typeof MILESTONES)[number] | null
+  >(null);
   const [showChecklist, setShowChecklist] = useState(false);
 
   const pct =
@@ -391,15 +724,21 @@ function GoalCard({
         )
       : 0;
   const isComplete = pct >= 100;
+  const remaining = Math.max(
+    Number(goal.target_amount) - Number(goal.current_amount),
+    0
+  );
 
   const bd = useMemo(() => getBreakdown(goal), [goal]);
   const checklist = useMemo(
     () => getMonthlyChecklist(goal, deposits),
     [goal, deposits]
   );
+  const streak = useMemo(() => computeStreak(deposits), [deposits]);
+  const quickAmounts = useMemo(() => computeQuickAmounts(bd), [bd]);
 
-  const handleDeposit = async () => {
-    const amount = parseFloat(draftAmt);
+  const handleDeposit = async (presetAmount?: number) => {
+    const amount = presetAmount ?? parseFloat(draftAmt);
     if (!amount || amount <= 0) return;
     setSubmitting(true);
     try {
@@ -410,20 +749,18 @@ function GoalCard({
         100
       );
       await onDeposit(goal.id, amount);
-      setDraftAmt("");
-      toast.success(`+${brlFull(amount)} guardado`);
+      if (presetAmount === undefined) setDraftAmt("");
+      setBurst((b) => b + 1);
       const crossed = getCrossed(prevPct, expectedNew);
       if (crossed.length > 0) {
-        setCelebrating(true);
-        setTimeout(() => setCelebrating(false), 700);
-        for (const m of crossed) {
-          setTimeout(() => {
-            toast.success(`${m.emoji} ${m.msg}`, {
-              description: `Vocês chegaram a ${m.pct}% da meta "${goal.name}"!`,
-              duration: 5000,
-            });
-          }, 350);
-        }
+        const highest = crossed[crossed.length - 1];
+        toast.success(`+${brlFull(amount)} guardado`, {
+          description: `${highest.emoji} ${highest.msg}`,
+        });
+        // Slight delay so user sees the deposit animation first
+        setTimeout(() => setUnlockModal(highest), 400);
+      } else {
+        toast.success(`+${brlFull(amount)} guardado`);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao depositar");
@@ -432,6 +769,9 @@ function GoalCard({
     }
   };
 
+  const brlFmt = useMemo(() => (n: number) => brlFull(n), []);
+  const brlShortFmt = useMemo(() => (n: number) => brl(n), []);
+
   return (
     <motion.div
       layout
@@ -439,23 +779,31 @@ function GoalCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       className={cn(
-        "overflow-hidden rounded-3xl border bg-card transition-[box-shadow,border-color]",
+        "relative overflow-hidden rounded-3xl border bg-card transition-[box-shadow,border-color]",
         isComplete ? "border-emerald-500/30" : "border-border",
-        celebrating && "ring-2 ring-primary/30 shadow-lg shadow-primary/5"
+        bd?.isOnTrack && !isComplete && "shadow-md shadow-primary/[0.06]"
       )}
     >
+      {/* CONFETTI overlay on top of the whole card */}
+      <Confetti burst={burst} />
+
       {/* HEADER */}
       <button
         type="button"
         onClick={onToggle}
-        className="w-full cursor-pointer p-4 text-left transition-colors hover:bg-muted/20 sm:p-5"
+        className="relative w-full cursor-pointer p-4 text-left transition-colors hover:bg-muted/20 sm:p-5"
       >
         <div className="flex items-start gap-3.5">
           <motion.div
-            animate={celebrating ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+            animate={burst > 0 ? { scale: [1, 1.18, 1] } : { scale: 1 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
+            key={`ring-${burst}`}
           >
-            <ProgressRing pct={pct} emoji={goal.emoji} />
+            <ProgressRing
+              pct={pct}
+              emoji={goal.emoji}
+              onTrack={bd?.isOnTrack ?? false}
+            />
           </motion.div>
 
           <div className="min-w-0 flex-1 pt-0.5">
@@ -468,13 +816,16 @@ function GoalCard({
                   Concluída 🏆
                 </span>
               )}
+              <StreakBadge streak={streak} />
             </div>
             <p className="mt-0.5 text-[12.5px] tabular text-muted-foreground">
-              {brlFull(Number(goal.current_amount))}
+              <span className="font-semibold text-foreground">
+                <CountUp value={Number(goal.current_amount)} format={brlFmt} />
+              </span>
               <span className="text-muted-foreground/60"> de </span>
               {brlFull(Number(goal.target_amount))}
             </p>
-            <div className="mt-2.5">
+            <div className="mt-3">
               <MilestoneRow pct={pct} />
             </div>
           </div>
@@ -523,6 +874,15 @@ function GoalCard({
           >
             <div className="space-y-5 border-t border-border bg-background/30 px-4 py-4 sm:px-5 sm:py-5">
 
+              {/* QUICK DEPOSIT CHIPS — top, primary action */}
+              {!isComplete && (
+                <QuickDepositChips
+                  amounts={quickAmounts}
+                  onPick={handleDeposit}
+                  submitting={submitting}
+                />
+              )}
+
               {/* MONTHLY CHECKLIST */}
               {checklist && (
                 <div className="space-y-1.5">
@@ -560,11 +920,11 @@ function GoalCard({
                 </div>
               )}
 
-              {/* DEPOSIT */}
+              {/* CUSTOM AMOUNT INPUT */}
               {!isComplete && (
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Novo depósito
+                    Outro valor
                   </Label>
                   <div className="flex gap-2">
                     <Input
@@ -582,7 +942,7 @@ function GoalCard({
                       className="h-10 flex-1"
                     />
                     <button
-                      onClick={handleDeposit}
+                      onClick={() => handleDeposit()}
                       disabled={
                         !draftAmt || parseFloat(draftAmt) <= 0 || submitting
                       }
@@ -599,17 +959,12 @@ function GoalCard({
                   <p className="text-[11px] text-muted-foreground">
                     Falta{" "}
                     <span className="font-semibold tabular text-foreground">
-                      {brlFull(
-                        Math.max(
-                          Number(goal.target_amount) - Number(goal.current_amount),
-                          0
-                        )
-                      )}
+                      <CountUp value={remaining} format={brlFmt} />
                     </span>{" "}
                     pra bater a meta.
                     {bd && bd.perMonth > 0 && (
                       <span className="ml-1 text-primary/80">
-                        ({brl(bd.perMonth)}/mês sugerido)
+                        ({brlShortFmt(bd.perMonth)}/mês sugerido)
                       </span>
                     )}
                   </p>
@@ -634,7 +989,7 @@ function GoalCard({
                 {deposits.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border bg-background/40 px-4 py-5 text-center">
                     <p className="text-xs text-muted-foreground">
-                      Nenhum depósito ainda.
+                      Nenhum depósito ainda. Toca em um chip aí em cima.
                     </p>
                   </div>
                 ) : (
@@ -695,6 +1050,17 @@ function GoalCard({
               </div>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* UNLOCK MODAL */}
+      <AnimatePresence>
+        {unlockModal && (
+          <MilestoneUnlockModal
+            milestone={unlockModal}
+            goalName={goal.name}
+            onClose={() => setUnlockModal(null)}
+          />
         )}
       </AnimatePresence>
     </motion.div>
@@ -857,7 +1223,6 @@ function CreateGoalDialog({
               Prazo para juntar
             </Label>
 
-            {/* Mode segmented control */}
             <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted/40 p-1">
               {(["months", "years", "date"] as DeadlineMode[]).map((m) => (
                 <button
@@ -876,7 +1241,6 @@ function CreateGoalDialog({
               ))}
             </div>
 
-            {/* Input based on mode */}
             {(mode === "months" || mode === "years") && (
               <div className="flex items-center gap-2">
                 <button
@@ -994,6 +1358,14 @@ export function GoalsPage() {
   ).length;
   const onTrackCount = goals.filter((g) => getBreakdown(g)?.isOnTrack).length;
 
+  // Global streak across ALL deposits
+  const globalStreak = useMemo(() => {
+    const allDeposits = Object.values(depositsByGoal).flat();
+    return computeStreak(allDeposits);
+  }, [depositsByGoal]);
+
+  const brlFmt = useMemo(() => (n: number) => brlFull(n), []);
+
   const handleCreate = async (data: CreateGoalData) => {
     await addGoal({
       name: data.name,
@@ -1068,12 +1440,22 @@ export function GoalsPage() {
                 {pctStr(totalPct)}
               </p>
               <p className="mt-1.5 text-[12px] tabular text-muted-foreground">
-                {brlFull(totalSaved)}{" "}
+                <span className="font-semibold text-foreground">
+                  <CountUp value={totalSaved} format={brlFmt} />
+                </span>{" "}
                 <span className="text-muted-foreground/60">de</span>{" "}
                 {brlFull(totalTarget)}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {globalStreak > 0 && (
+                <div className="flex items-center gap-1.5 rounded-2xl bg-gradient-to-br from-orange-500/15 to-red-500/10 px-3 py-2 ring-1 ring-orange-500/30">
+                  <Flame className="h-3.5 w-3.5 text-orange-400" fill="currentColor" />
+                  <span className="text-[12px] font-bold text-orange-400">
+                    {globalStreak} {globalStreak === 1 ? "dia" : "dias"} seguidos
+                  </span>
+                </div>
+              )}
               {completedCount > 0 && (
                 <div className="flex items-center gap-1.5 rounded-2xl bg-emerald-500/10 px-3 py-2 ring-1 ring-emerald-500/20">
                   <Trophy className="h-3.5 w-3.5 text-emerald-500" />
