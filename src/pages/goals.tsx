@@ -1217,8 +1217,8 @@ function GoalCard({
       if (presetAmount === undefined) setDraftAmt("");
       setBurst((b) => b + 1);
       const crossed = getCrossed(prevPct, expectedNew);
-      if (crossed.length > 0) {
-        const highest = crossed[crossed.length - 1];
+      const highest = crossed.length > 0 ? crossed[crossed.length - 1] : null;
+      if (highest) {
         toast.success(`+${brlFull(amount)} guardado`, {
           description: `${highest.emoji} ${highest.msg}`,
         });
