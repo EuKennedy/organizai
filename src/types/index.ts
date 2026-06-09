@@ -100,7 +100,8 @@ export const DATE_TIER_META: Record<DateCostTier, DateTierMeta> = {
 };
 
 export const DEFAULT_DATE_TIER_LIMITS: Record<DateCostTier, number> = { 1: 120, 2: 250, 3: 400 };
-export const DEFAULT_DATE_WEEKLY_QUOTA: Record<DateCostTier, number> = { 1: 1, 2: 2, 3: 1 };
+export const DEFAULT_DATE_MONTHLY_QUOTA: Record<DateCostTier, number> = { 1: 1, 2: 2, 3: 1 };
+export const DEFAULT_DATE_MONTHLY_BUDGET = 2000;
 
 export interface Transaction {
   id: string;
@@ -419,8 +420,10 @@ export interface Couple {
   monthly_capacity: number | null;
   /** Teto R$ por tier de rolê. Chaves "1"/"2"/"3" = barato/médio/caro. */
   date_tier_limits: Record<string, number> | null;
-  /** Quota semanal de rolês por tier. */
+  /** Quota MENSAL de rolês por tier (nome legado "weekly"). */
   date_weekly_quota: Record<string, number> | null;
+  /** Teto total R$ de gasto com dates por mês. */
+  date_monthly_budget: number | null;
   created_at: string;
   updated_at: string;
 }

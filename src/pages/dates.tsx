@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { format, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
+import { format, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useDates } from "@/hooks/use-dates";
 import { useCouple } from "@/hooks/use-couple";
@@ -48,7 +48,8 @@ import {
   WEATHER_EMOJI,
   DATE_TIER_META,
   DEFAULT_DATE_TIER_LIMITS,
-  DEFAULT_DATE_WEEKLY_QUOTA,
+  DEFAULT_DATE_MONTHLY_QUOTA,
+  DEFAULT_DATE_MONTHLY_BUDGET,
   type DateIdea,
   type DateCostTier,
   type WeatherIcon,
@@ -110,12 +111,12 @@ interface TierStats {
   overspent: boolean;
 }
 
-function computeWeekStats(
+function computeMonthStats(
   dates: DateIdea[],
   limits: Record<DateCostTier, number>,
   quota: Record<DateCostTier, number>,
-  weekStart: Date,
-  weekEnd: Date
+  monthStart: Date,
+  monthEnd: Date
 ): Record<DateCostTier, TierStats> {
   const out: Record<DateCostTier, TierStats> = {
     1: { tier: 1, used: 0, quota: quota[1], spent: 0, budget: quota[1] * limits[1], overspent: false },
@@ -126,7 +127,7 @@ function computeWeekStats(
     if (d.status !== "done") continue;
     if (!d.cost_tier) continue;
     const eff = getEffectiveDate(d);
-    if (!isWithinInterval(eff, { start: weekStart, end: weekEnd })) continue;
+    if (!isWithinInterval(eff, { start: monthStart, end: monthEnd })) continue;
     const tier = d.cost_tier as DateCostTier;
     out[tier].used++;
     out[tier].spent += Number(d.actual_cost ?? d.estimated_cost ?? 0);
@@ -137,12 +138,8 @@ function computeWeekStats(
   return out;
 }
 
-function formatWeekRange(start: Date, end: Date): string {
-  const sameMonth = start.getMonth() === end.getMonth();
-  if (sameMonth) {
-    return `${format(start, "d")}–${format(end, "d 'de' MMM", { locale: ptBR })}`;
-  }
-  return `${format(start, "d MMM", { locale: ptBR })} – ${format(end, "d MMM", { locale: ptBR })}`;
+function formatMonthLabel(d: Date): string {
+  return format(d, "MMMM yyyy", { locale: ptBR });
 }
 
 // ─── TierBadge ────────────────────────────────────────────────────────────────
@@ -226,37 +223,42 @@ function TierPicker({
 
 // ─── WeekBudgetCard ───────────────────────────────────────────────────────────
 
-function WeekBudgetCard({
+function MonthBudgetCard({
   stats,
   limits,
   quota,
-  weekStart,
-  weekEnd,
+  monthlyBudget,
+  monthDate,
   onSaveConfig,
 }: {
   stats: Record<DateCostTier, TierStats>;
   limits: Record<DateCostTier, number>;
   quota: Record<DateCostTier, number>;
-  weekStart: Date;
-  weekEnd: Date;
+  monthlyBudget: number;
+  monthDate: Date;
   onSaveConfig: (
     limits: Record<DateCostTier, number>,
-    quota: Record<DateCostTier, number>
+    quota: Record<DateCostTier, number>,
+    monthlyBudget: number
   ) => Promise<void>;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [editLimits, setEditLimits] = useState(limits);
   const [editQuota, setEditQuota] = useState(quota);
+  const [editBudget, setEditBudget] = useState(monthlyBudget);
   const [saving, setSaving] = useState(false);
 
+  // Real money out this month = sum of all tier spend (the hard ceiling tracker)
   const totalSpent = stats[1].spent + stats[2].spent + stats[3].spent;
-  const totalBudget = stats[1].budget + stats[2].budget + stats[3].budget;
-  const pct = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
+  const plannedBudget = stats[1].budget + stats[2].budget + stats[3].budget;
+  const pct = monthlyBudget > 0 ? Math.min((totalSpent / monthlyBudget) * 100, 100) : 0;
+  const remaining = monthlyBudget - totalSpent;
+  const overBudget = totalSpent > monthlyBudget;
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSaveConfig(editLimits, editQuota);
+      await onSaveConfig(editLimits, editQuota, editBudget);
       setEditOpen(false);
     } finally {
       setSaving(false);
@@ -267,29 +269,30 @@ function WeekBudgetCard({
     if (open) {
       setEditLimits(limits);
       setEditQuota(quota);
+      setEditBudget(monthlyBudget);
     }
     setEditOpen(open);
   };
 
   return (
     <section className="mb-6 overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-primary/[0.03] p-5 sm:p-6">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <Wallet className="h-3.5 w-3.5 text-primary" />
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Esta semana
+              Orçamento do mês
             </p>
           </div>
-          <p className="mt-0.5 text-[15px] font-semibold tracking-tight">
-            {formatWeekRange(weekStart, weekEnd)}
+          <p className="mt-0.5 text-[15px] font-semibold capitalize tracking-tight">
+            {formatMonthLabel(monthDate)}
           </p>
         </div>
         <Popover open={editOpen} onOpenChange={handleOpenChange}>
           <PopoverTrigger asChild>
             <button
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-background/50 px-3 py-1.5 text-[11px] font-semibold text-foreground/80 transition-colors hover:border-primary/40 hover:text-foreground"
-              aria-label="Editar limites e quotas"
+              aria-label="Editar orçamento, limites e quotas"
             >
               <Pencil className="h-3 w-3" />
               Ajustar
@@ -299,10 +302,27 @@ function WeekBudgetCard({
             <div className="space-y-3">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                  Limites e quotas
+                  Orçamento mensal
+                </p>
+                <Input
+                  type="number"
+                  min="0"
+                  step="50"
+                  value={editBudget}
+                  onChange={(e) => setEditBudget(parseFloat(e.target.value) || 0)}
+                  className="mt-1.5 h-10 text-base tabular"
+                  placeholder="2000"
+                />
+                <p className="mt-1 text-[10.5px] text-muted-foreground/80">
+                  Teto total de gasto com dates por mês.
+                </p>
+              </div>
+              <div className="border-t border-border pt-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                  Limites e quotas por tier
                 </p>
                 <p className="mt-0.5 text-[11.5px] text-muted-foreground/80">
-                  Quanto custa cada tier e quantos rolês/semana.
+                  Custo de cada tier e quantos rolês/mês.
                 </p>
               </div>
               <div className="space-y-2">
@@ -340,12 +360,12 @@ function WeekBudgetCard({
                         </div>
                         <div>
                           <Label className="text-[9.5px] uppercase tracking-wide text-muted-foreground">
-                            Por semana
+                            Por mês
                           </Label>
                           <Input
                             type="number"
                             min="0"
-                            max="10"
+                            max="31"
                             value={editQuota[t]}
                             onChange={(e) =>
                               setEditQuota((p) => ({ ...p, [t]: parseInt(e.target.value) || 0 }))
@@ -377,6 +397,42 @@ function WeekBudgetCard({
             </div>
           </PopoverContent>
         </Popover>
+      </div>
+
+      {/* MASTER BUDGET BAR — teto mensal */}
+      <div className="mb-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-2xl font-bold tabular tracking-tight sm:text-3xl">
+            {brlFull(totalSpent)}
+            <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+              de {brlFull(monthlyBudget)}
+            </span>
+          </p>
+          <p
+            className={cn(
+              "text-[12px] font-bold tabular",
+              overBudget ? "text-red-400" : remaining < monthlyBudget * 0.2 ? "text-amber-500" : "text-emerald-500"
+            )}
+          >
+            {overBudget
+              ? `${brl(-remaining)} acima`
+              : `${brl(remaining)} livre`}
+          </p>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted/40">
+          <motion.div
+            className={cn(
+              "h-full rounded-full",
+              pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500"
+            )}
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }}
+          />
+        </div>
+        <p className="mt-1.5 text-[10.5px] tabular text-muted-foreground">
+          {Math.round(pct)}% do teto · plano de rolês soma {brl(plannedBudget)}/mês
+        </p>
       </div>
 
       {/* Tier pills */}
@@ -412,7 +468,6 @@ function WeekBudgetCard({
               <p className="mt-0.5 text-[10.5px] tabular text-muted-foreground">
                 {brl(s.spent)}<span className="text-muted-foreground/60"> / {brl(s.budget)}</span>
               </p>
-              {/* Mini dots showing slot status */}
               <div className="mt-2 flex gap-1">
                 {Array.from({ length: Math.max(1, s.quota) }, (_, i) => (
                   <div
@@ -429,29 +484,6 @@ function WeekBudgetCard({
             </div>
           );
         })}
-      </div>
-
-      {/* Total bar */}
-      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[11.5px] tabular text-muted-foreground">
-          <span className="font-bold text-foreground">{brlFull(totalSpent)}</span>{" "}
-          <span className="text-muted-foreground/60">de</span>{" "}
-          <span className="font-semibold">{brlFull(totalBudget)}</span> esta semana
-        </p>
-        <p className="text-[11.5px] font-semibold tabular text-primary">
-          {Math.round(pct)}% usado
-        </p>
-      </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/40">
-        <motion.div
-          className={cn(
-            "h-full rounded-full",
-            pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-primary"
-          )}
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }}
-        />
       </div>
     </section>
   );
@@ -559,15 +591,16 @@ export function DatesPage() {
     [couple]
   );
   const quota = useMemo(
-    () => normalizeTierMap(couple?.date_weekly_quota, DEFAULT_DATE_WEEKLY_QUOTA),
+    () => normalizeTierMap(couple?.date_weekly_quota, DEFAULT_DATE_MONTHLY_QUOTA),
     [couple]
   );
+  const monthlyBudget = couple?.date_monthly_budget ?? DEFAULT_DATE_MONTHLY_BUDGET;
 
-  const weekStart = useMemo(() => startOfWeek(today, { weekStartsOn: 1 }), [today]);
-  const weekEnd = useMemo(() => endOfWeek(today, { weekStartsOn: 1 }), [today]);
-  const weekStats = useMemo(
-    () => computeWeekStats(dates, limits, quota, weekStart, weekEnd),
-    [dates, limits, quota, weekStart, weekEnd]
+  const monthStart = useMemo(() => startOfMonth(today), [today]);
+  const monthEnd = useMemo(() => endOfMonth(today), [today]);
+  const monthStats = useMemo(
+    () => computeMonthStats(dates, limits, quota, monthStart, monthEnd),
+    [dates, limits, quota, monthStart, monthEnd]
   );
 
   const stats = useMemo(() => {
@@ -694,12 +727,14 @@ export function DatesPage() {
 
   const handleSaveBudgetConfig = async (
     newLimits: Record<DateCostTier, number>,
-    newQuota: Record<DateCostTier, number>
+    newQuota: Record<DateCostTier, number>,
+    newBudget: number
   ) => {
     try {
       await updateCouple({
         date_tier_limits: { "1": newLimits[1], "2": newLimits[2], "3": newLimits[3] },
         date_weekly_quota: { "1": newQuota[1], "2": newQuota[2], "3": newQuota[3] },
+        date_monthly_budget: newBudget,
       });
       toast.success("Orçamento atualizado");
     } catch (err) {
@@ -730,13 +765,13 @@ export function DatesPage() {
         }
       />
 
-      {/* WEEKLY BUDGET CARD */}
-      <WeekBudgetCard
-        stats={weekStats}
+      {/* MONTHLY BUDGET CARD */}
+      <MonthBudgetCard
+        stats={monthStats}
         limits={limits}
         quota={quota}
-        weekStart={weekStart}
-        weekEnd={weekEnd}
+        monthlyBudget={monthlyBudget}
+        monthDate={monthStart}
         onSaveConfig={handleSaveBudgetConfig}
       />
 
