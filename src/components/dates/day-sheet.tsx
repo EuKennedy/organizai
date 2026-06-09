@@ -41,6 +41,8 @@ interface DaySheetProps {
   }) => Promise<void>;
   onSelect: (date: DateIdea) => void;
   onDelete: (id: string) => Promise<void>;
+  /** Set/clear cost tier on an existing date inline. */
+  onSetTier: (id: string, tier: DateCostTier | null) => void;
   /** Attach an existing loose idea to the selected day at the given time. */
   onAttachLoose: (id: string, dateTime: string) => Promise<void>;
 }
@@ -53,6 +55,7 @@ export function DaySheet({
   onCreate,
   onSelect,
   onDelete,
+  onSetTier,
   onAttachLoose,
 }: DaySheetProps) {
   const [name, setName] = useState("");
@@ -163,8 +166,9 @@ export function DaySheet({
               {dayDates.map((d) => (
                 <div
                   key={d.id}
-                  className="group flex items-center gap-3 rounded-2xl border border-border bg-background/40 p-3"
+                  className="group rounded-2xl border border-border bg-background/40 p-3"
                 >
+                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => onSelect(d)}
                     className="flex flex-1 min-w-0 items-center gap-3 text-left"
@@ -224,6 +228,36 @@ export function DaySheet({
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
+                 </div>
+
+                  {/* Inline tier quick-picker — categorizar sem sair do calendário */}
+                  <div className="mt-2.5 flex items-center gap-1.5 border-t border-border/50 pt-2.5">
+                    <span className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                      Tier
+                    </span>
+                    <div className="flex flex-1 gap-1">
+                      {TIERS.map((t) => {
+                        const meta = DATE_TIER_META[t];
+                        const active = d.cost_tier === t;
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => onSetTier(d.id, active ? null : t)}
+                            className={cn(
+                              "flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border px-1.5 py-1 text-[10px] font-semibold transition-all",
+                              active
+                                ? `${meta.bg} ${meta.border} ${meta.text}`
+                                : "border-border bg-muted/20 text-muted-foreground/70 hover:bg-muted/40"
+                            )}
+                          >
+                            <span className="text-[11px] leading-none">{meta.emoji}</span>
+                            {meta.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

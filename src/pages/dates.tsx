@@ -975,6 +975,7 @@ export function DatesPage() {
           }, 100);
         }}
         onDelete={handleDelete}
+        onSetTier={(id, tier) => handleFieldUpdate(id, { cost_tier: tier })}
         onAttachLoose={async (id, dateTime) => {
           try {
             await updateDate(id, { date_time: dateTime, status: "scheduled" });
