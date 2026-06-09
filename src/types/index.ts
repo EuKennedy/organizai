@@ -40,6 +40,8 @@ export interface Series {
   updated_at: string;
 }
 
+export type DateCostTier = 1 | 2 | 3;
+
 export interface DateIdea {
   id: string;
   user_id: string;
@@ -51,9 +53,54 @@ export interface DateIdea {
   place_name: string | null;
   place_photos: string[];
   status: "idea" | "scheduled" | "done";
+  /** 1=barato, 2=médio, 3=caro. Null = sem categoria. */
+  cost_tier: DateCostTier | null;
+  /** Previsão de gasto (planejamento). */
+  estimated_cost: number | null;
+  /** Gasto real (preenche após marcar done). */
+  actual_cost: number | null;
   created_at: string;
   updated_at: string;
 }
+
+export interface DateTierMeta {
+  label: string;
+  emoji: string;
+  ring: string;
+  bg: string;
+  text: string;
+  border: string;
+}
+
+export const DATE_TIER_META: Record<DateCostTier, DateTierMeta> = {
+  1: {
+    label: "Barato",
+    emoji: "🪙",
+    ring: "ring-teal-500/30",
+    bg: "bg-teal-500/10",
+    text: "text-teal-400",
+    border: "border-teal-500/30",
+  },
+  2: {
+    label: "Médio",
+    emoji: "🍷",
+    ring: "ring-amber-500/30",
+    bg: "bg-amber-500/10",
+    text: "text-amber-400",
+    border: "border-amber-500/30",
+  },
+  3: {
+    label: "Caro",
+    emoji: "💎",
+    ring: "ring-rose-500/30",
+    bg: "bg-rose-500/10",
+    text: "text-rose-400",
+    border: "border-rose-500/30",
+  },
+};
+
+export const DEFAULT_DATE_TIER_LIMITS: Record<DateCostTier, number> = { 1: 120, 2: 250, 3: 400 };
+export const DEFAULT_DATE_WEEKLY_QUOTA: Record<DateCostTier, number> = { 1: 1, 2: 2, 3: 1 };
 
 export interface Transaction {
   id: string;
@@ -370,6 +417,10 @@ export interface Couple {
   android_partner_name: string | null;
   /** Quanto o casal pode guardar por mês. Habilita o smart allocator. */
   monthly_capacity: number | null;
+  /** Teto R$ por tier de rolê. Chaves "1"/"2"/"3" = barato/médio/caro. */
+  date_tier_limits: Record<string, number> | null;
+  /** Quota semanal de rolês por tier. */
+  date_weekly_quota: Record<string, number> | null;
   created_at: string;
   updated_at: string;
 }

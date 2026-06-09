@@ -8,15 +8,37 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { btnPrimary } from "@/lib/ui";
 import { cn } from "@/lib/utils";
-import { WEATHER_EMOJI, type DateIdea } from "@/types";
+import {
+  WEATHER_EMOJI,
+  DATE_TIER_META,
+  type DateIdea,
+  type DateCostTier,
+} from "@/types";
+
+const TIERS: DateCostTier[] = [1, 2, 3];
+
+function brl(v: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  }).format(v);
+}
 
 interface DaySheetProps {
   /** Selected day (Date at 00:00 local). Null = closed. */
   day: Date | null;
   dates: DateIdea[];
+  /** Tier R$ ceiling map for hints. */
+  limits: Record<DateCostTier, number>;
   onClose: () => void;
   /** Create with name + date_time pre-set to this day. Time defaults to 19:00. */
-  onCreate: (params: { name: string; dateTime: string }) => Promise<void>;
+  onCreate: (params: {
+    name: string;
+    dateTime: string;
+    cost_tier?: DateCostTier | null;
+    estimated_cost?: number | null;
+  }) => Promise<void>;
   onSelect: (date: DateIdea) => void;
   onDelete: (id: string) => Promise<void>;
   /** Attach an existing loose idea to the selected day at the given time. */
@@ -26,6 +48,7 @@ interface DaySheetProps {
 export function DaySheet({
   day,
   dates,
+  limits,
   onClose,
   onCreate,
   onSelect,
@@ -34,6 +57,8 @@ export function DaySheet({
 }: DaySheetProps) {
   const [name, setName] = useState("");
   const [time, setTime] = useState("19:00");
+  const [tier, setTier] = useState<DateCostTier | null>(null);
+  const [estimated, setEstimated] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
   const [showLooseIdeas, setShowLooseIdeas] = useState(false);
@@ -60,8 +85,15 @@ export function DaySheet({
     dt.setHours(hh ?? 19, mm ?? 0, 0, 0);
     setCreating(true);
     try {
-      await onCreate({ name: name.trim(), dateTime: dt.toISOString() });
+      await onCreate({
+        name: name.trim(),
+        dateTime: dt.toISOString(),
+        cost_tier: tier,
+        estimated_cost: estimated,
+      });
       setName("");
+      setTier(null);
+      setEstimated(null);
     } finally {
       setCreating(false);
     }
@@ -145,6 +177,21 @@ export function DaySheet({
                         <p className="truncate text-sm font-semibold tracking-tight">
                           {d.name}
                         </p>
+                        {d.cost_tier && (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0 text-[9px] font-bold uppercase tracking-wide ring-1",
+                              DATE_TIER_META[d.cost_tier as DateCostTier].bg,
+                              DATE_TIER_META[d.cost_tier as DateCostTier].text,
+                              DATE_TIER_META[d.cost_tier as DateCostTier].ring
+                            )}
+                          >
+                            <span className="text-[10px] leading-none">
+                              {DATE_TIER_META[d.cost_tier as DateCostTier].emoji}
+                            </span>
+                            {DATE_TIER_META[d.cost_tier as DateCostTier].label}
+                          </span>
+                        )}
                         <StatusBadge status={d.status} />
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0 text-[11px] text-muted-foreground">
@@ -210,6 +257,48 @@ export function DaySheet({
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                   className="h-10"
                 />
+
+                {/* Tier picker */}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {TIERS.map((t) => {
+                    const meta = DATE_TIER_META[t];
+                    const active = tier === t;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTier(active ? null : t)}
+                        className={cn(
+                          "flex cursor-pointer flex-col items-center gap-0.5 rounded-xl border py-1.5 text-[10.5px] font-semibold transition-all",
+                          active
+                            ? `${meta.bg} ${meta.border} ${meta.text}`
+                            : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                        )}
+                      >
+                        <span className="text-sm leading-none">{meta.emoji}</span>
+                        {meta.label}
+                        <span className="text-[9px] opacity-70 tabular">{brl(limits[t])}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {tier !== null && (
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder={`Custo estimado · até ${brl(limits[tier])}`}
+                    value={estimated ?? ""}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setEstimated(isFinite(v) ? v : null);
+                    }}
+                    className="h-9 tabular"
+                  />
+                )}
+
                 <button
                   onClick={handleCreate}
                   disabled={!name.trim() || creating}
