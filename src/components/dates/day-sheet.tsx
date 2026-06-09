@@ -43,6 +43,8 @@ interface DaySheetProps {
   onDelete: (id: string) => Promise<void>;
   /** Set/clear cost tier on an existing date inline. */
   onSetTier: (id: string, tier: DateCostTier | null) => void;
+  /** Set the cost value (actual if done, else estimated). */
+  onSetCost: (id: string, value: number | null) => void;
   /** Attach an existing loose idea to the selected day at the given time. */
   onAttachLoose: (id: string, dateTime: string) => Promise<void>;
 }
@@ -56,6 +58,7 @@ export function DaySheet({
   onSelect,
   onDelete,
   onSetTier,
+  onSetCost,
   onAttachLoose,
 }: DaySheetProps) {
   const [name, setName] = useState("");
@@ -65,6 +68,13 @@ export function DaySheet({
   const [creating, setCreating] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
   const [showLooseIdeas, setShowLooseIdeas] = useState(false);
+  /** Local cost drafts keyed by date id — commits onBlur/Enter to avoid refetch per keystroke. */
+  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
+
+  const commitCost = (id: string, raw: string) => {
+    const v = parseFloat(raw.replace(",", "."));
+    onSetCost(id, isFinite(v) && v >= 0 ? v : null);
+  };
 
   const isOpen = !!day;
   const dayDates = day
@@ -258,6 +268,46 @@ export function DaySheet({
                       })}
                     </div>
                   </div>
+
+                  {/* Cost input — aparece quando tier selecionado */}
+                  {d.cost_tier && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                        {d.status === "done" ? "Gasto" : "Estimado"}
+                      </span>
+                      <div className="relative flex-1">
+                        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-muted-foreground">
+                          R$
+                        </span>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          placeholder={`até ${brl(limits[d.cost_tier as DateCostTier])}`}
+                          value={
+                            costDrafts[d.id] ??
+                            (() => {
+                              const stored =
+                                d.status === "done" ? d.actual_cost : d.estimated_cost;
+                              return stored != null ? String(stored) : "";
+                            })()
+                          }
+                          onChange={(e) =>
+                            setCostDrafts((p) => ({ ...p, [d.id]: e.target.value }))
+                          }
+                          onBlur={(e) => commitCost(d.id, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              commitCost(d.id, (e.target as HTMLInputElement).value);
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="h-8 pl-8 text-xs tabular"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

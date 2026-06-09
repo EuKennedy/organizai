@@ -1011,6 +1011,11 @@ export function DatesPage() {
         }}
         onDelete={handleDelete}
         onSetTier={(id, tier) => handleFieldUpdate(id, { cost_tier: tier })}
+        onSetCost={(id, value) => {
+          const d = dates.find((x) => x.id === id);
+          const field = d?.status === "done" ? "actual_cost" : "estimated_cost";
+          handleFieldUpdate(id, { [field]: value });
+        }}
         onAttachLoose={async (id, dateTime) => {
           try {
             await updateDate(id, { date_time: dateTime, status: "scheduled" });
