@@ -6,8 +6,13 @@
 > the code, fork it, learn from it, build your own version if it helps.
 
 A couples organizer my girlfriend and I use every day: movies, series, date
-ideas, photo murals, love letters, beauty wishlist, expenses and savings
-goals — all in one app instead of scattered spreadsheets.
+ideas, photo murals, love letters, wishlists, expenses and savings goals — all
+in one app instead of scattered spreadsheets.
+
+Built to be quick on purpose. Auth, database, storage and row-level security
+all come from Supabase off the shelf, so the whole project is screens and
+product decisions and almost no plumbing. That trade is the reason it exists
+at all: I wanted the thing we'd actually use, not a backend to maintain.
 
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)
@@ -28,8 +33,13 @@ goals — all in one app instead of scattered spreadsheets.
   lightbox.
 - **Letters** — cartinhas with moods (declaration, saudade, apology, etc.),
   reader/composer flow in serif editorial type.
+- **Wishlist** — anything either of us wants, with a want / bought / gave-up
+  lifecycle, so the list stays honest instead of growing forever.
 - **Expenses / Goals** — monthly dashboard with category pie chart; savings
-  goals with a deposit timeline and trash-to-undo per deposit.
+  goals with a deposit timeline and trash-to-undo per deposit. A trip is just
+  a goal with a deadline.
+- **Baby names** — "para um dia". The most personal screen in here, and the
+  reason this is a couples app and not a template.
 
 ## Stack
 
